@@ -1,0 +1,90 @@
+
+
+===== PÁGINA 1 =====
+Talhão | Variedade |Área(ha)| Plantio | Talhão | Variedade |Área (ha)| Plantio
+1 RB975201 39,56 |02/05/2026 11 CTC9006 25,20 |03/05/2026
+2 RB975201 35,28 |02/05/2026 12 RB975375 19,40 | 03/06/2026
+3 RB975201 449 _| 02/05/2026 13 CTC9006 23,12 |03/05/2026
+4 RB975201 5,40 |02/05/2026 14 RB975375 31,99 |22/04/2026
+5 RB975201 16,90 |02/05/2026 15 RB975375 29,57 | 22/04/2026
+6 RB975201 9,17 __| 02/05/2026 16 RB975375 2,35 |22/04/2026
+7 RB975201 33,51 |02/05/2026 17 RB975375 18,36 |22/04/2026
+8 RB975201 25,58 |02/05/2026 18 RB975375 15,23 |22/04/2026
+9 RB975201 23,82 |02/05/2026 19 RB975375 11,83 _| 22/04/2026
+10 RB975375 31,89 | 03/06/2026 402,65
+3 4
+APP 4,49ha 540ha APP
+< a APP
+2
+4 35,28ha
+1 2
+39,56ha E PASTO
+É
+ie
+8
+25,58ha 9
+6 ° 23,82ha
+9,17ha 7
+33,51ha
+APP
+APP
+10
+31,89ha
+16
+u 2,35ha am
+31,99ha
+15 2 p
+4 Ou 19,40ha
+S
+a
+E 17
+18,36ha
+18
+Árvores CANA Pátio py 15,23ha
+@ Cascalho 19
+11,83ha
+RESUMO DE AREAS (ha) LF.
+Area de Cana 402,65
+Area de Carreador 17,03
+Patio Fixo 1,37
+Cascalho 0,88
+Estrada 1,73
+Árvores 1,03
+Área Total 424,69
+Bico; Status! Rea de Gana:
+409F0002 Mapa de Safra 2027/28 rea de Cana: 402,65 ha ou 166,38 alq.
+fonpamento Area de Carreador: 17,03 ha ou 7,04 ala.
+Usina Vertente “o aidartavo Area de Carreador(%) 4,05%
+Un. Gestora Propriedade:
+Vertente Fazenda Santa Amélia AREATOTAL: 424,69 ha ou 175,49 ala.
+Município: Levantamento: Data último desenho Escala: Decliv. Média:
+CJATLAS Guaraci - SP Jeová 24/06/2026 1117.500
+“egrimensura & topograta Distancia até Unidade Gestora (km): Tipo Desenho: Latitude / Longitude (Sirgas - 2000)
+Convencional Carlos Alberto 20º2232,942"S / 49º501,523'W
+
+Tel (17 38171024
+Aan ars 3 Co eo
+
+q
+a
+o”
+a
+
+E
+
+SI
+iS
+8
+S
+y
+
+Localização
+
+409F 0002
+
+é
+é
+3
+
+ES
+

@@ -1,0 +1,165 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Leitor de Documentos</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+</head>
+
+<body>
+
+    <main class="container">
+
+        <section class="header">
+
+            <h1>
+                Leitor de Documentos
+            </h1>
+
+            <p>
+                Envie um PDF ou imagem para extrair automaticamente
+                o texto do documento.
+            </p>
+
+        </section>
+
+
+        <section class="upload-card">
+
+            <form
+                id="uploadForm"
+                enctype="multipart/form-data"
+            >
+
+                <div class="upload-area">
+
+                    <input
+                        type="file"
+                        id="arquivo"
+                        name="arquivo"
+                        accept=".pdf,.png,.jpg,.jpeg,.tiff"
+                    >
+
+                    <label for="arquivo">
+
+                        <div class="upload-icon">
+                            📄
+                        </div>
+
+                        <h2>
+                            Selecione um documento
+                        </h2>
+
+                        <p>
+                            PDF, PNG, JPG, JPEG ou TIFF
+                        </p>
+
+                    </label>
+
+                </div>
+
+
+                <div
+                    id="nomeSelecionado"
+                    class="nome-selecionado"
+                ></div>
+
+
+                <button
+                    type="submit"
+                    id="btnProcessar"
+                >
+                    Escanear documento
+                </button>
+
+            </form>
+
+        </section>
+
+
+        <section
+            id="loading"
+            class="loading hidden"
+        >
+
+            <div class="spinner"></div>
+
+            <p>
+                Processando documento...
+            </p>
+
+        </section>
+
+
+        <section
+            id="resultado"
+            class="resultado hidden"
+        >
+
+            <div class="resultado-header">
+
+                <div>
+
+                    <h2>
+                        Texto encontrado
+                    </h2>
+
+                    <span id="nomeArquivo"></span>
+
+                </div>
+
+                <a
+                    id="download"
+                    class="download-button"
+                    href="#"
+                >
+                    Baixar TXT
+                </a>
+
+            </div>
+
+
+            <textarea
+                id="texto"
+                readonly
+            ></textarea>
+
+        </section>
+
+
+        <section
+            id="erro"
+            class="erro hidden"
+        >
+
+            <h3>
+                Erro
+            </h3>
+
+            <p id="mensagemErro"></p>
+
+        </section>
+
+    </main>
+
+
+    <script
+        src="{{ url_for('static', filename='js/script.js') }}"
+    ></script>
+
+</body>
+
+</html>
+```
