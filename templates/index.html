@@ -1,8 +1,8 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 
 <head>
+
     <meta charset="UTF-8">
 
     <meta
@@ -16,11 +16,18 @@
         rel="stylesheet"
         href="{{ url_for('static', filename='css/style.css') }}"
     >
+
 </head>
+
 
 <body>
 
     <main class="container">
+
+
+        <!-- =====================================================
+             CABEÇALHO
+        ====================================================== -->
 
         <section class="header">
 
@@ -30,11 +37,16 @@
 
             <p>
                 Envie um PDF ou imagem para extrair automaticamente
-                o texto do documento.
+                as informações do documento.
             </p>
 
         </section>
 
+
+
+        <!-- =====================================================
+             UPLOAD
+        ====================================================== -->
 
         <section class="upload-card">
 
@@ -89,6 +101,11 @@
         </section>
 
 
+
+        <!-- =====================================================
+             LOADING
+        ====================================================== -->
+
         <section
             id="loading"
             class="loading hidden"
@@ -102,6 +119,118 @@
 
         </section>
 
+
+
+        <!-- =====================================================
+             CHECK-IN
+        ====================================================== -->
+
+        <section
+            id="checkin"
+            class="checkin hidden"
+        >
+
+            <div class="checkin-header">
+
+                <div>
+
+                    <h2>
+                        Check-in do documento
+                    </h2>
+
+                    <p>
+                        Verificação das informações obrigatórias
+                    </p>
+
+                </div>
+
+
+                <div
+                    id="checkinPercentual"
+                    class="checkin-percentual"
+                >
+                    0%
+                </div>
+
+            </div>
+
+
+
+            <!-- RESUMO -->
+
+            <div
+                id="checkinResumo"
+                class="checkin-resumo"
+            >
+
+                <div class="checkin-resumo-item">
+
+                    <span class="resumo-numero" id="camposEncontrados">
+                        0
+                    </span>
+
+                    <span class="resumo-label">
+                        Encontrados
+                    </span>
+
+                </div>
+
+
+                <div class="checkin-resumo-item">
+
+                    <span class="resumo-numero" id="camposFaltantes">
+                        0
+                    </span>
+
+                    <span class="resumo-label">
+                        Faltantes
+                    </span>
+
+                </div>
+
+
+                <div
+                    id="statusCheckin"
+                    class="checkin-status"
+                >
+                    Verificando...
+                </div>
+
+            </div>
+
+
+
+            <!-- CAMPOS -->
+
+            <div
+                id="listaCheckin"
+                class="lista-checkin"
+            ></div>
+
+
+
+            <!-- CAMPOS FALTANTES -->
+
+            <div
+                id="alertaFaltantes"
+                class="alerta-faltantes hidden"
+            >
+
+                <h3>
+                    ⚠️ Informações não identificadas
+                </h3>
+
+                <p id="listaFaltantes"></p>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =====================================================
+             RESULTADO OCR
+        ====================================================== -->
 
         <section
             id="resultado"
@@ -119,6 +248,7 @@
                     <span id="nomeArquivo"></span>
 
                 </div>
+
 
                 <a
                     id="download"
@@ -139,6 +269,11 @@
         </section>
 
 
+
+        <!-- =====================================================
+             ERRO
+        ====================================================== -->
+
         <section
             id="erro"
             class="erro hidden"
@@ -152,7 +287,9 @@
 
         </section>
 
+
     </main>
+
 
 
     <script
@@ -162,4 +299,3 @@
 </body>
 
 </html>
-```
