@@ -1,0 +1,89 @@
+{
+  "sucesso": true,
+  "metadata": {
+    "bloco": "407P0012",
+    "proprietario": "",
+    "municipio": "RESUMO - DE",
+    "propriedade": "Fazenda Santa Maria",
+    "area_local": "",
+    "area_cana": "133,12",
+    "area_carreador": "4,86",
+    "area_carreador_percentual": "3,50%",
+    "area_total": "139,69",
+    "status": "Plantio ha Localização 55,01 133,12 ou alq. 2026 - Agrupamento La a",
+    "unidade_gestora": "Vertente",
+    "distancia_unidade_gestora": "",
+    "declividade_media": "440%",
+    "latitude": "",
+    "longitude": "",
+    "escala": "1/12.500",
+    "tipo": "Convencional",
+    "agrupamento": "",
+    "levantamento": "",
+    "desenho": "Carlos Coimbra",
+    "data_ultimo_desenho": "06/04/2026"
+  },
+  "blocos": [
+    {
+      "bloco": "407P0012",
+      "talhoes": []
+    }
+  ],
+  "paginas": [
+    {
+      "pagina": 0,
+      "texto": "|\nVá BL-407P0047\n/\na J a.\nO a\n&\nva 7\nDad 14,98ha\nrá\nrd\nA 25,13ha\nBL-407P0051 a 5 .\n4 9,13ha BL-407P0039\nrd\n/ 9,12ha\n/ ,\n>\n/\n/ A\n8,85ha :\n/\n/ / o PASTO\n/\n/ 3\n‘ 26,85ha\n|\n2\nBL-407P0035 ” 32,59ha\n,\nVY\nBL-407P0048 a\n“4 |\nLF. 647ha PASTO\n.\nÁ Árvores a\n| Áreaçha)| Plantio |\nÁrea de Perca para Estrada de Acesso Confinamento - 0,75ha RB985476 19/02/2026\n, RB985476 | 32,59 | 19/02/2026\nRESUMO DE ÁREAS (ha) RB985476 | 26,85 | 19/02/2026\nÁrea de Cana 133,12 RB985476 19/02/2026\nÁrea de Carreador 4,86 RB985476 19/02/2026\nÁrea de Perca 0,75 | 6 | RB985476 19/02/2026\nÁrvores 0,15 RB985476 | 14,98 | 19/02/2026\nPátio Fixo 0,81 | 8 | RB985476 | 25,13 | 19/02/2026\n13960 Área Total 139,69 DE |\nBloco: 407P0012 Status: Plantio - 2026 Área x de Cana: 133,12 ha ou 55,01 alq. Localização a\nLa | Agrupamento: Área de Carreador: 4,86 ha ou 2,01 alq. ; eo “Lg a\nUsina Usina ina Vertente Proprietário: Area « de Carreador (%): , me ve ioga o E leet pitty,\nJosé Carlos Coimbra de Queiroz Filho 3,50% | al ANOS\nUn. Gestora: Vertente Propriedade: Fazenda Santa Maria AREA TOTAL : 139,69 ha ou 57,72 alq. / Gy. io RE A Boe Be “Aim\nDO Levantamento: meen a am Município: Levantamento: — Dataúltimo Data último desenho Escala: Decliv. Média: i DA feno 407 mes, ATE le\nCOATLAS Guaraci - SP Marcos Oliveira 06/04/2026 1/ 12.500 440% SS a\nagrimensure & &topegrata Distancia até Unidade Gestora (km): | Tipo Desenho: / Longitude (Sirgas - 2000) eer ad GR | + Ne A a\na ane tunas yen 27 KM Convencional Arthur Almeida 20º12'20,540\"S /49°0'35,222\"W ae Hae |",
+      "palavras_ocr": 268,
+      "linhas": 71,
+      "tabelas": 1,
+      "talhoes_extraidos": 0,
+      "estrutura_tabela": {
+        "modo": "sem_cabecalho"
+      }
+    }
+  ],
+  "confianca": {
+    "metadata": 0.85,
+    "talhoes": 0.0,
+    "geral": 0.42
+  },
+  "avisos": [
+    "Campo de metadados não identificado: proprietario",
+    "Campo de metadados não identificado: area_local"
+  ],
+  "bloco": "407P0012",
+  "proprietario": "",
+  "municipio": "RESUMO - DE",
+  "propriedade": "Fazenda Santa Maria",
+  "area_local": "",
+  "area_cana": "133,12",
+  "area_carreador": "4,86",
+  "area_carreador_percentual": "3,50%",
+  "area_total": "139,69",
+  "status": "Plantio ha Localização 55,01 133,12 ou alq. 2026 - Agrupamento La a",
+  "unidade_gestora": "Vertente",
+  "distancia_unidade_gestora": "",
+  "declividade_media": "440%",
+  "latitude": "",
+  "longitude": "",
+  "escala": "1/12.500",
+  "tipo": "Convencional",
+  "agrupamento": "",
+  "levantamento": "",
+  "desenho": "Carlos Coimbra",
+  "data_ultimo_desenho": "06/04/2026",
+  "talhoes": [],
+  "validacao": {
+    "valido": false,
+    "erros": [
+      "Campo obrigatório não encontrado: proprietario",
+      "Campo obrigatório não encontrado: area_local"
+    ],
+    "avisos": [],
+    "total_blocos": 1,
+    "total_talhoes": 0
+  },
+  "status_validacao": "ERRO",
+  "documento_id": "20260928_114226_d02e9fba",
+  "arquivo_original": "407P0012 (1) (1).pdf"
+}

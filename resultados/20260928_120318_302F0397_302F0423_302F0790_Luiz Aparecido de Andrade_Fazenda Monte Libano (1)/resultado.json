@@ -1,0 +1,463 @@
+{
+  "avisos": [
+    "Propriedade não identificada.",
+    "3 talhão(ões) possuem pelo menos um campo agrícola incompleto.",
+    "Talhão 1141: campos incompletos (area).",
+    "Talhão 1142: campos incompletos (area).",
+    "Talhão 2023: campos incompletos (plantio)."
+  ],
+  "bloco": "302P0005",
+  "blocos": [
+    {
+      "bloco": "302P0005",
+      "talhoes": [
+        {
+          "area": "7,31",
+          "bloco": "302P0005",
+          "linha": 0,
+          "origem": "sequencia_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "6,39",
+          "bloco": "302P0005",
+          "linha": 1,
+          "origem": "sequencia_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "2",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "5,31",
+          "bloco": "302P0005",
+          "linha": 2,
+          "origem": "sequencia_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "3",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "11,68",
+          "bloco": "302P0005",
+          "linha": 3,
+          "origem": "sequencia_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "4",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "8,89",
+          "bloco": "302P0005",
+          "linha": 4,
+          "origem": "sequencia_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "5",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "13,57",
+          "bloco": "302P0005",
+          "linha": 5,
+          "origem": "ocr_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "6",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "242",
+          "bloco": "302P0005",
+          "linha": 7,
+          "origem": "ocr_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "242",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "5,32",
+          "bloco": "302P0005",
+          "linha": 6,
+          "origem": "sequencia_tabela",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1138",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "4,63",
+          "bloco": "302P0005",
+          "linha": 8,
+          "origem": "sequencia_tabela",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1140",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "",
+          "bloco": "302P0005",
+          "linha": 9,
+          "origem": "sequencia_tabela",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1141",
+          "variedade": "RB655156"
+        },
+        {
+          "area": "",
+          "bloco": "302P0005",
+          "linha": 10,
+          "origem": "sequencia_tabela",
+          "pagina": 0,
+          "plantio": "05/09/2026",
+          "talhao": "1142",
+          "variedade": "RBS5156"
+        },
+        {
+          "area": "1143",
+          "bloco": "302P0005",
+          "linha": 11,
+          "origem": "ocr_espacial+vizinho",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1143",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "5,55",
+          "bloco": "302P0005",
+          "linha": 12,
+          "origem": "sequencia_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1144",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "8,27",
+          "bloco": "302P0005",
+          "linha": 13,
+          "origem": "sequencia_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1145",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "5,32",
+          "bloco": "302P0005",
+          "linha": 14,
+          "origem": "sequencia_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1146",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "9,92",
+          "bloco": "302P0005",
+          "linha": 15,
+          "origem": "sequencia_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1147",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "5,85",
+          "bloco": "302P0005",
+          "linha": 16,
+          "origem": "sequencia_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1148",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "7,14",
+          "bloco": "302P0005",
+          "linha": 17,
+          "origem": "sequencia_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1149",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "0,69",
+          "bloco": "302P0005",
+          "linha": 18,
+          "origem": "sequencia_espacial",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1150",
+          "variedade": "RB855156"
+        },
+        {
+          "area": "2023",
+          "bloco": "302P0005",
+          "linha": 0,
+          "origem": "ocr_espacial",
+          "pagina": 0,
+          "plantio": "",
+          "talhao": "2023",
+          "variedade": "RB855156"
+        }
+      ]
+    }
+  ],
+  "confianca": {
+    "geral": 0.68,
+    "metadata": 0.5,
+    "talhoes": 0.85
+  },
+  "metadata": {
+    "bloco": "302P0005",
+    "propriedade": ""
+  },
+  "paginas": [
+    {
+      "estrutura_tabela": {
+        "cabecalhos": 3,
+        "header_y": 130.5,
+        "linhas_direita": 7,
+        "linhas_esquerda": 19,
+        "modo": "duas_colunas"
+      },
+      "linhas": 99,
+      "pagina": 0,
+      "palavras_ocr": 355,
+      "tabelas": 2,
+      "talhoes_extraidos": 26,
+      "texto": "BL-302F0790 8050280225] TT [TT]\nTalhão Area(ha)| Plantio | Talhão Area(ha)| [ Plantio |\nRB855156 | 7,31 [05/03/2026 RB855156 2023\nRB855156 | 6,39 [05/03/2026 RB855156 2023\nRB855156 | 5,31 [05/03/2026 RB855156 2023\nRB855156 | 11,68 [05/03/2026 4 | RB855156 2023\nRB855156 | 8,89 [05/03/2026 RB855156 2023\n” 6 | RB855156 | 13,57 [05/03/2026|| 6 | RB855156 2023\nRB855156 | 5,32 [05/03/2026 RB855156 2023\n8 | | 192\n\"9 | RB855156 | 242 [05/03/2026] —\nRB855156 | 4,63 [05/03/2026] [7777777 Bi W/W\n| sos | Talhão [ Variedade | Areatha) | Plantio |\nRB655156 | | 3,64 [05/03/2026\nRBS5156 | 5,87 [05/09/2026 4\nRB855156 | 1143 [TT [Ts mm) | | g\nRB855156 | 5,55 [05/03/2026 &\nRB855156 | 8,27 [05/03/2026 E\nRB855156 | 5,32 [05/03/2026 5\nRB855156 | 9,92 [05/03/2026\nRB855156 | 5,85 [05/03/2026 Í\nRB855156 | 7,14 [05/03/2026 Fant 7\nRB855156 | 0,69 [05/03/2026 LF. Ph 2.37ha\nE DR ee E A |\" }\n]\n4 (| i\n{ ( [ À\n<A\nIN pp Ra » N \\ i}\nss D \\ > ) |\nE % %, ae\n16 MN 4 A À\nQ, 8,27ha 18 2 ] 3\n4 9,92ha E, Hy ) 2\nBL-302F0388 ão | 11,68ha ANE © y 5 O\nva \\ | x\nZ : fee | CURRAL OM =\nry\n8,89ha NY WIS §\nG LE ENA\n7\nim [vm &\n3\nGre APP LN LN NE << A APP 2,75ha ha 2\nUSD A LF. 0,69ha/ APP N \\ a 0 v\n= 4,63ha\n2 8 ss: APP\nBL-302P0005 =\n42ha\nO x\n659 Anores\nRESUMO DE AREAS (ha)\nArea de Cana 189,89\nArea de Carreador 9,66\nRede de Alta Tensão 0,46\nÁrea Total 200,03\neer Bloco: Si Mapa Mapa 7 de Safra 2027/28 Area ‘ de Cana: 189,89 ha ou 78,47 alq. oca . ização x\nTe ereos pam 9,66 ha cu 3.99 ala. ND\" PRO\nWA iz Proprietário: Aparecido deAndrade de Andrade Careadr (6 9 . 484% 4,84 % a. o a a\nUn. Gestora: Propriedade: ‘ . bi : ra é gal gm DS an\nJose só | Monte Libano 200,03 ha ou 82,66 ala. PM É |\n» Municipio: Levantamento: Data último desenho | Escala: Decliv. Média: o q e\nCJATLAS JATLAS 1910812026. [1717-500 [1.117.500 |\nagrimensura & topografia Distancia até Unidade Gestora | (km): | Tipo | Desenho: armuraimeita_[20°37'22,789\"S/ Latitude / Longitude (Sirgas - 2000) ae taco À 3 GG SS |\nane ram Gomvencionat 48°38'09-148'W PN ere NE"
+    }
+  ],
+  "propriedade": "",
+  "status_validacao": "ATENCAO",
+  "sucesso": true,
+  "talhoes": [
+    {
+      "area": "7,31",
+      "bloco": "302P0005",
+      "linha": 0,
+      "origem": "sequencia_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "6,39",
+      "bloco": "302P0005",
+      "linha": 1,
+      "origem": "sequencia_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "2",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "5,31",
+      "bloco": "302P0005",
+      "linha": 2,
+      "origem": "sequencia_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "3",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "11,68",
+      "bloco": "302P0005",
+      "linha": 3,
+      "origem": "sequencia_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "4",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "8,89",
+      "bloco": "302P0005",
+      "linha": 4,
+      "origem": "sequencia_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "5",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "13,57",
+      "bloco": "302P0005",
+      "linha": 5,
+      "origem": "ocr_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "6",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "242",
+      "bloco": "302P0005",
+      "linha": 7,
+      "origem": "ocr_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "242",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "5,32",
+      "bloco": "302P0005",
+      "linha": 6,
+      "origem": "sequencia_tabela",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1138",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "4,63",
+      "bloco": "302P0005",
+      "linha": 8,
+      "origem": "sequencia_tabela",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1140",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "",
+      "bloco": "302P0005",
+      "linha": 9,
+      "origem": "sequencia_tabela",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1141",
+      "variedade": "RB655156"
+    },
+    {
+      "area": "",
+      "bloco": "302P0005",
+      "linha": 10,
+      "origem": "sequencia_tabela",
+      "pagina": 0,
+      "plantio": "05/09/2026",
+      "talhao": "1142",
+      "variedade": "RBS5156"
+    },
+    {
+      "area": "1143",
+      "bloco": "302P0005",
+      "linha": 11,
+      "origem": "ocr_espacial+vizinho",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1143",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "5,55",
+      "bloco": "302P0005",
+      "linha": 12,
+      "origem": "sequencia_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1144",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "8,27",
+      "bloco": "302P0005",
+      "linha": 13,
+      "origem": "sequencia_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1145",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "5,32",
+      "bloco": "302P0005",
+      "linha": 14,
+      "origem": "sequencia_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1146",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "9,92",
+      "bloco": "302P0005",
+      "linha": 15,
+      "origem": "sequencia_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1147",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "5,85",
+      "bloco": "302P0005",
+      "linha": 16,
+      "origem": "sequencia_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1148",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "7,14",
+      "bloco": "302P0005",
+      "linha": 17,
+      "origem": "sequencia_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1149",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "0,69",
+      "bloco": "302P0005",
+      "linha": 18,
+      "origem": "sequencia_espacial",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1150",
+      "variedade": "RB855156"
+    },
+    {
+      "area": "2023",
+      "bloco": "302P0005",
+      "linha": 0,
+      "origem": "ocr_espacial",
+      "pagina": 0,
+      "plantio": "",
+      "talhao": "2023",
+      "variedade": "RB855156"
+    }
+  ],
+  "validacao": {
+    "avisos": [
+      "Propriedade não identificada.",
+      "3 talhão(ões) possuem pelo menos um campo agrícola incompleto.",
+      "Talhão 1141: campos incompletos (area).",
+      "Talhão 1142: campos incompletos (area).",
+      "Talhão 2023: campos incompletos (plantio)."
+    ],
+    "erros": [
+      "Campo obrigatório ausente: propriedade"
+    ],
+    "talhoes_incompletos": 3,
+    "total_talhoes": 20,
+    "valido": false
+  }
+}

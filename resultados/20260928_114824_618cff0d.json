@@ -1,0 +1,431 @@
+{
+  "sucesso": true,
+  "metadata": {
+    "bloco": "409F0002",
+    "propriedade": "Fazenda Santa Amélia"
+  },
+  "blocos": [
+    {
+      "bloco": "409F0002",
+      "talhoes": [
+        {
+          "talhao": "1",
+          "variedade": "RB975201",
+          "area": "39,56",
+          "plantio": "02/05/2026",
+          "pagina": 0,
+          "origem": "sequencia_espacial",
+          "linha": 0,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "2",
+          "variedade": "RB975201",
+          "area": "35,28",
+          "plantio": "02/05/2026",
+          "pagina": 0,
+          "origem": "sequencia_espacial",
+          "linha": 1,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "3",
+          "variedade": "RB975201",
+          "area": "4,49",
+          "plantio": "02/05/2026",
+          "pagina": 0,
+          "origem": "sequencia_espacial",
+          "linha": 2,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "4",
+          "variedade": "RB975201",
+          "area": "5,40",
+          "plantio": "02/05/2026",
+          "pagina": 0,
+          "origem": "mapa_numero_area",
+          "linha": 3,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "5",
+          "variedade": "RB975201",
+          "area": "16,90",
+          "plantio": "02/05/2026",
+          "pagina": 0,
+          "origem": "sequencia_espacial",
+          "linha": 4,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "6",
+          "variedade": "RB975201",
+          "area": "9,17",
+          "plantio": "02/05/2026",
+          "pagina": 0,
+          "origem": "mapa_numero_area",
+          "linha": 5,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "7",
+          "variedade": "RB975201",
+          "area": "33,51",
+          "plantio": "02/05/2026",
+          "pagina": 0,
+          "origem": "sequencia_espacial",
+          "linha": 6,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "8",
+          "variedade": "RB975201",
+          "area": "25,58",
+          "plantio": "02/05/2026",
+          "pagina": 0,
+          "origem": "ocr_espacial",
+          "linha": 7,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "9",
+          "variedade": "RB975201",
+          "area": "23,82",
+          "plantio": "02/05/2026",
+          "pagina": 0,
+          "origem": "ocr_espacial+vizinho",
+          "linha": 8,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "10",
+          "variedade": "RB975375",
+          "area": "31,89",
+          "plantio": "03/06/2026",
+          "pagina": 0,
+          "origem": "sequencia_espacial",
+          "linha": 9,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "11",
+          "variedade": "CTC9006",
+          "area": "25,20",
+          "plantio": "03/05/2026",
+          "pagina": 0,
+          "origem": "sequencia_tabela",
+          "linha": 0,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "12",
+          "variedade": "RB975375",
+          "area": "19,40",
+          "plantio": "03/06/2026",
+          "pagina": 0,
+          "origem": "sequencia_tabela",
+          "linha": 1,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "13",
+          "variedade": "CTC9006",
+          "area": "23,12",
+          "plantio": "03/05/2026",
+          "pagina": 0,
+          "origem": "sequencia_tabela",
+          "linha": 2,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "14",
+          "variedade": "RB975375",
+          "area": "31,99",
+          "plantio": "22/04/2026",
+          "pagina": 0,
+          "origem": "sequencia_tabela",
+          "linha": 3,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "15",
+          "variedade": "RB975375",
+          "area": "29,57",
+          "plantio": "22/04/2026",
+          "pagina": 0,
+          "origem": "sequencia_tabela",
+          "linha": 4,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "16",
+          "variedade": "RB975375",
+          "area": "2,35",
+          "plantio": "22/04/2026",
+          "pagina": 0,
+          "origem": "mapa_numero_area",
+          "linha": 5,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "17",
+          "variedade": "RB975375",
+          "area": "18,36",
+          "plantio": "22/04/2026",
+          "pagina": 0,
+          "origem": "sequencia_tabela",
+          "linha": 6,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "18",
+          "variedade": "RB975375",
+          "area": "15,23",
+          "plantio": "22/04/2026",
+          "pagina": 0,
+          "origem": "sequencia_tabela",
+          "linha": 7,
+          "bloco": "409F0002"
+        },
+        {
+          "talhao": "19",
+          "variedade": "RB975375",
+          "area": "11,83",
+          "plantio": "22/04/2026",
+          "pagina": 0,
+          "origem": "sequencia_tabela",
+          "linha": 8,
+          "bloco": "409F0002"
+        }
+      ]
+    }
+  ],
+  "paginas": [
+    {
+      "pagina": 0,
+      "texto": "Área(ha)| Área (ha)| Plantio | Talhão | Variedade [Área |Área(ha)| (ha)| Plantio | o\nRB975201 | 39,56 |02/05/2026 ctc9006 | 25,20 [03/05/2026 |\nRB975201 | 35,28 |02/05/2026 RB975375 | 19,40 [03/06/2026\nRB975201 | 4,49 02/05/2026 ctc9006 | 23,12 |03/05/2026 a\n| 4 | RB975201 02/05/2026 RB975375 | 31,99 |22/04/2026\nRB975201 | 16,90 02/05/2026 RB975375 | 29,57 |22/04/2026\n| 6 | RB975201 02/05/2026 RB975375 22/04/2026\nRB975201 | 33,51 |02/05/2026 RB975375 | 18,36 |22/04/2026\n| 8 | RB975201 | 25,58 |02/05/2026 RB975375 | 15,23 |22/04/2026\n| 9 | RB975201 | 23,82 RB975375 | 11,83 |22/04/2026\nRB975375 | 31,89 [03/06/2026] | S| oes |\n4\nAPP 3 5,40ha\nAPP 4,49ha APP\nq =~ APP\n2 5\nJ. 35,28ha 16,90ha É\n1 wd an\n39,56ha É E Pitig PASTO\n% A\n| . 2\n- 25,58ha 9 8\n6 23,82ha Ba\n9,17ha 7 . a\n33,51ha ‘ E\nAPP É i\nAPP |\n10 no, 11\n. 31,89ha 25,20ha |!\n16\n14 2,35ha app /\n31,99ha op\n<\n15 ~ . Pátio\n12 wag Fj xo | É\n3 29,57ha . 19,40ha = a ES\n- No m\nq .\nva 17 13 i\n1 18,36ha 23,12ha if\nN |\n18 8 i\nArvores CANA Pas ° Lixo 15,23ha N |\nO Cascalho 19 I\n, 11,83ha JN\nRESUMO DE ÁREAS (ha) LF. a\nArea de Cana 402,65 i\nArea de Carreador 17,03 <\nPátio Fixo 1,37 a\nCascalho 0,88 8\nEstrada 1,73 &\nÁrvores 1,03 Vv\nArea Total 424,69\nBloco: Status:\n409F0002 Mapa de Safra 2027/28 Area de Cana: 402,65 ha ou 166,38 alq. Localização\nLy | Agrupamento: Área de Carreador: 17,03 ha ou 7,04 alq. er wee + es.\nUsina Vertente Propristário: ietário: Area A de Carreador (%): 4,05% Ei ‘a 4 à veses PRO are\nMarco Aidar Ittavo A É\nUn. Gestora: Vertente Propriedade: Fazenda Santa Amélia ÁREA « TOTAL : 424,69 ha ou 175,49 alq. [A À «és EO cots a ( sh ee\nMunicipio: Levantamento: Data ultimo desenho Escala: Decliv. Média: 0)2) sf ime a\nCOATLAS Guaraci - SP Jeová 24/06/2026 1/17.500 A 2 lin\nagrimensure &topografa & Distancia até Unidade Gestora (km): Tipo Desenho: Latitude / Longitude (Sirgas - 2000) PAD “ \"Ses, el\nRito a be se Convencional Carlos Alberto 20º22'32,942\"S / 49°5'01,523\"W E =. a",
+      "palavras_ocr": 340,
+      "linhas": 96,
+      "tabelas": 1,
+      "talhoes_extraidos": 19,
+      "estrutura_tabela": {
+        "modo": "duas_colunas",
+        "cabecalhos": 1,
+        "linhas_esquerda": 10,
+        "linhas_direita": 9,
+        "header_y": 69.5
+      }
+    }
+  ],
+  "confianca": {
+    "metadata": 1.0,
+    "talhoes": 1.0,
+    "geral": 1.0
+  },
+  "avisos": [],
+  "bloco": "409F0002",
+  "propriedade": "Fazenda Santa Amélia",
+  "talhoes": [
+    {
+      "talhao": "1",
+      "variedade": "RB975201",
+      "area": "39,56",
+      "plantio": "02/05/2026",
+      "pagina": 0,
+      "origem": "sequencia_espacial",
+      "linha": 0,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "2",
+      "variedade": "RB975201",
+      "area": "35,28",
+      "plantio": "02/05/2026",
+      "pagina": 0,
+      "origem": "sequencia_espacial",
+      "linha": 1,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "3",
+      "variedade": "RB975201",
+      "area": "4,49",
+      "plantio": "02/05/2026",
+      "pagina": 0,
+      "origem": "sequencia_espacial",
+      "linha": 2,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "4",
+      "variedade": "RB975201",
+      "area": "5,40",
+      "plantio": "02/05/2026",
+      "pagina": 0,
+      "origem": "mapa_numero_area",
+      "linha": 3,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "5",
+      "variedade": "RB975201",
+      "area": "16,90",
+      "plantio": "02/05/2026",
+      "pagina": 0,
+      "origem": "sequencia_espacial",
+      "linha": 4,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "6",
+      "variedade": "RB975201",
+      "area": "9,17",
+      "plantio": "02/05/2026",
+      "pagina": 0,
+      "origem": "mapa_numero_area",
+      "linha": 5,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "7",
+      "variedade": "RB975201",
+      "area": "33,51",
+      "plantio": "02/05/2026",
+      "pagina": 0,
+      "origem": "sequencia_espacial",
+      "linha": 6,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "8",
+      "variedade": "RB975201",
+      "area": "25,58",
+      "plantio": "02/05/2026",
+      "pagina": 0,
+      "origem": "ocr_espacial",
+      "linha": 7,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "9",
+      "variedade": "RB975201",
+      "area": "23,82",
+      "plantio": "02/05/2026",
+      "pagina": 0,
+      "origem": "ocr_espacial+vizinho",
+      "linha": 8,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "10",
+      "variedade": "RB975375",
+      "area": "31,89",
+      "plantio": "03/06/2026",
+      "pagina": 0,
+      "origem": "sequencia_espacial",
+      "linha": 9,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "11",
+      "variedade": "CTC9006",
+      "area": "25,20",
+      "plantio": "03/05/2026",
+      "pagina": 0,
+      "origem": "sequencia_tabela",
+      "linha": 0,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "12",
+      "variedade": "RB975375",
+      "area": "19,40",
+      "plantio": "03/06/2026",
+      "pagina": 0,
+      "origem": "sequencia_tabela",
+      "linha": 1,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "13",
+      "variedade": "CTC9006",
+      "area": "23,12",
+      "plantio": "03/05/2026",
+      "pagina": 0,
+      "origem": "sequencia_tabela",
+      "linha": 2,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "14",
+      "variedade": "RB975375",
+      "area": "31,99",
+      "plantio": "22/04/2026",
+      "pagina": 0,
+      "origem": "sequencia_tabela",
+      "linha": 3,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "15",
+      "variedade": "RB975375",
+      "area": "29,57",
+      "plantio": "22/04/2026",
+      "pagina": 0,
+      "origem": "sequencia_tabela",
+      "linha": 4,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "16",
+      "variedade": "RB975375",
+      "area": "2,35",
+      "plantio": "22/04/2026",
+      "pagina": 0,
+      "origem": "mapa_numero_area",
+      "linha": 5,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "17",
+      "variedade": "RB975375",
+      "area": "18,36",
+      "plantio": "22/04/2026",
+      "pagina": 0,
+      "origem": "sequencia_tabela",
+      "linha": 6,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "18",
+      "variedade": "RB975375",
+      "area": "15,23",
+      "plantio": "22/04/2026",
+      "pagina": 0,
+      "origem": "sequencia_tabela",
+      "linha": 7,
+      "bloco": "409F0002"
+    },
+    {
+      "talhao": "19",
+      "variedade": "RB975375",
+      "area": "11,83",
+      "plantio": "22/04/2026",
+      "pagina": 0,
+      "origem": "sequencia_tabela",
+      "linha": 8,
+      "bloco": "409F0002"
+    }
+  ],
+  "validacao": {
+    "valido": true,
+    "erros": [],
+    "avisos": [],
+    "total_talhoes": 19,
+    "talhoes_incompletos": 0
+  },
+  "status_validacao": "OK",
+  "documento_id": "20260928_114824_618cff0d",
+  "arquivo_original": "409F0002_Marco Aidar Ittavo_Fazenda Santa Amélia (2) (1).pdf"
+}

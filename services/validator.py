@@ -1,26 +1,9 @@
-"""
-Validador de documentos agrícolas.
-
-Este módulo recebe o documento produzido pelo
-AgriculturalExtractor e verifica se os campos
-obrigatórios estão preenchidos.
-"""
-
-from models.schemas import novo_documento
-
-
-# ============================================================
-# CAMPOS OBRIGATÓRIOS
-# ============================================================
+from copy import deepcopy
 
 CAMPOS_METADATA_OBRIGATORIOS = [
     "bloco",
-    "proprietario",
     "propriedade",
-    "area_local",
-    "area_cana",
 ]
-
 
 CAMPOS_TALHAO_OBRIGATORIOS = [
     "talhao",
@@ -30,202 +13,48 @@ CAMPOS_TALHAO_OBRIGATORIOS = [
 ]
 
 
-# ============================================================
-# VALIDAÇÃO PRINCIPAL
-# ============================================================
-
 def validar_documento(documento):
-    """
-    Valida e normaliza a estrutura do documento.
-
-    Não altera os dados extraídos de forma agressiva.
-    Apenas garante que a estrutura exista e registra
-    problemas encontrados.
-    """
-
-    if not isinstance(documento, dict):
-        documento = novo_documento()
-
-    documento.setdefault(
-        "metadata",
-        {}
-    )
-
-    documento.setdefault(
-        "blocos",
-        []
-    )
-
-    documento.setdefault(
-        "confianca",
-        {}
-    )
-
-    # --------------------------------------------------------
-    # Estrutura de validação
-    # --------------------------------------------------------
-
+    documento = deepcopy(documento or {})
     erros = []
-    avisos = []
+    avisos = list(documento.get("avisos") or [])
 
-    metadata = documento["metadata"]
-
-    # --------------------------------------------------------
-    # Validação dos metadados
-    # --------------------------------------------------------
+    metadata = documento.setdefault("metadata", {})
 
     for campo in CAMPOS_METADATA_OBRIGATORIOS:
+        if not str(metadata.get(campo, "") or "").strip():
+            erros.append(f"Campo obrigatório ausente: {campo}")
 
-        valor = metadata.get(
-            campo,
-            ""
-        )
+    total = 0
+    incompletos = 0
 
-        if valor is None or str(valor).strip() == "":
-            erros.append(
-                f"Campo obrigatório não encontrado: {campo}"
-            )
-
-    # --------------------------------------------------------
-    # Validação dos blocos
-    # --------------------------------------------------------
-
-    if not documento["blocos"]:
-
-        avisos.append(
-            "Nenhum bloco foi identificado no documento."
-        )
-
-    # --------------------------------------------------------
-    # Validação dos talhões
-    # --------------------------------------------------------
-
-    total_talhoes = 0
-
-    for indice_bloco, bloco in enumerate(
-        documento["blocos"],
-        start=1
-    ):
-
-        if not isinstance(bloco, dict):
-
-            erros.append(
-                f"Bloco {indice_bloco} possui estrutura inválida."
-            )
-
-            continue
-
-        codigo_bloco = bloco.get(
-            "bloco",
-            ""
-        )
-
-        talhoes = bloco.get(
-            "talhoes",
-            []
-        )
-
-        if not codigo_bloco:
-
-            avisos.append(
-                f"Bloco {indice_bloco} foi identificado "
-                f"sem código."
-            )
-
-        if not isinstance(talhoes, list):
-
-            erros.append(
-                f"Bloco {codigo_bloco or indice_bloco} "
-                f"possui lista de talhões inválida."
-            )
-
-            continue
-
-        for indice_talhao, talhao in enumerate(
-            talhoes,
-            start=1
-        ):
-
-            total_talhoes += 1
-
-            if not isinstance(talhao, dict):
-
-                erros.append(
-                    f"Talhão {indice_talhao} do bloco "
-                    f"{codigo_bloco or indice_bloco} "
-                    f"possui estrutura inválida."
+    for bloco in documento.get("blocos") or []:
+        for talhao in bloco.get("talhoes") or []:
+            total += 1
+            faltantes = [
+                campo for campo in CAMPOS_TALHAO_OBRIGATORIOS
+                if not str(talhao.get(campo, "") or "").strip()
+            ]
+            if faltantes:
+                incompletos += 1
+                avisos.append(
+                    f"Talhão {talhao.get('talhao') or '?'}: "
+                    f"campos incompletos ({', '.join(faltantes)})."
                 )
 
-                continue
-
-            for campo in CAMPOS_TALHAO_OBRIGATORIOS:
-
-                valor = talhao.get(
-                    campo,
-                    ""
-                )
-
-                if valor is None or str(valor).strip() == "":
-
-                    avisos.append(
-                        f"Talhão "
-                        f"{talhao.get('talhao', indice_talhao)} "
-                        f"do bloco "
-                        f"{codigo_bloco or indice_bloco}: "
-                        f"campo '{campo}' não identificado."
-                    )
-
-    # --------------------------------------------------------
-    # Informações da validação
-    # --------------------------------------------------------
+    if total == 0:
+        erros.append("Nenhum talhão foi identificado.")
 
     documento["validacao"] = {
-        "valido": len(erros) == 0,
+        "valido": not erros,
         "erros": erros,
         "avisos": avisos,
-        "total_blocos": len(
-            documento["blocos"]
-        ),
-        "total_talhoes": total_talhoes
+        "total_talhoes": total,
+        "talhoes_incompletos": incompletos,
     }
-
-    # --------------------------------------------------------
-    # Status geral
-    # --------------------------------------------------------
-
-    if erros:
-
-        documento["status_validacao"] = "ERRO"
-
-    elif avisos:
-
-        documento["status_validacao"] = "ATENCAO"
-
-    else:
-
-        documento["status_validacao"] = "OK"
-
+    documento["status_validacao"] = "OK" if not erros else "ATENCAO"
+    documento["avisos"] = avisos
     return documento
 
 
-# ============================================================
-# FUNÇÃO AUXILIAR
-# ============================================================
-
 def documento_valido(documento):
-    """
-    Retorna True quando o documento não possui
-    erros de validação.
-    """
-
-    documento = validar_documento(
-        documento
-    )
-
-    return documento.get(
-        "validacao",
-        {}
-    ).get(
-        "valido",
-        False
-    )
+    return bool((documento or {}).get("validacao", {}).get("valido"))

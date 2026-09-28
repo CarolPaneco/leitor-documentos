@@ -1,0 +1,718 @@
+{
+  "avisos": [],
+  "bloco": "",
+  "blocos": [
+    {
+      "bloco": "302F0790",
+      "talhoes": [
+        {
+          "_lado": "unico",
+          "_linha_tabela": 0,
+          "_origem": "sequencia_tabela",
+          "area": "7,31",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "1",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 1,
+          "_origem": "sequencia_tabela",
+          "area": "6,39",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "2",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 2,
+          "_origem": "sequencia_tabela",
+          "area": "5,31",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "3",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 3,
+          "_origem": "sequencia_tabela",
+          "area": "11,68",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "4",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 4,
+          "_origem": "sequencia_tabela",
+          "area": "8,89",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "5",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 5,
+          "_origem": "sequencia_tabela",
+          "area": "13,57",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "6",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 6,
+          "_origem": "sequencia_tabela",
+          "area": "5,32",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "7",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 7,
+          "_origem": "sequencia_tabela",
+          "area": "1,92",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "8",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 8,
+          "_origem": "sequencia_tabela",
+          "area": "2,42",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "9",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 9,
+          "_origem": "sequencia_tabela",
+          "area": "4,63",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "10",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 10,
+          "_origem": "sequencia_tabela",
+          "area": "2,75",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "11",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 11,
+          "_origem": "sequencia_tabela",
+          "area": "3,64",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "12",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 12,
+          "_origem": "sequencia_tabela",
+          "area": "5,87",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "13",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 13,
+          "_origem": "sequencia_tabela",
+          "area": "11,43",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "14",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 14,
+          "_origem": "sequencia_tabela",
+          "area": "5,55",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "15",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 15,
+          "_origem": "sequencia_tabela",
+          "area": "8,27",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "16",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 16,
+          "_origem": "sequencia_tabela",
+          "area": "5,32",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "17",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 17,
+          "_origem": "sequencia_tabela",
+          "area": "9,92",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "18",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 18,
+          "_origem": "sequencia_tabela",
+          "area": "5,85",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "19",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 19,
+          "_origem": "sequencia_tabela",
+          "area": "7,14",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "20",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 20,
+          "_origem": "sequencia_tabela",
+          "area": "0,69",
+          "bloco": "302F0790",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "21",
+          "variedade": "RB855156"
+        }
+      ]
+    },
+    {
+      "bloco": "302F0423",
+      "talhoes": [
+        {
+          "_lado": "unico",
+          "_linha_tabela": 0,
+          "_origem": "sequencia_tabela",
+          "area": "4,81",
+          "bloco": "302F0423",
+          "pagina": 0,
+          "plantio": "2023",
+          "talhao": "1",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 1,
+          "_origem": "sequencia_tabela",
+          "area": "7,59",
+          "bloco": "302F0423",
+          "pagina": 0,
+          "plantio": "2023",
+          "talhao": "2",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 2,
+          "_origem": "sequencia_tabela",
+          "area": "7,88",
+          "bloco": "302F0423",
+          "pagina": 0,
+          "plantio": "2023",
+          "talhao": "3",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 3,
+          "_origem": "sequencia_tabela",
+          "area": "5,75",
+          "bloco": "302F0423",
+          "pagina": 0,
+          "plantio": "2023",
+          "talhao": "4",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 4,
+          "_origem": "sequencia_tabela",
+          "area": "7,32",
+          "bloco": "302F0423",
+          "pagina": 0,
+          "plantio": "2023",
+          "talhao": "5",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 5,
+          "_origem": "sequencia_tabela",
+          "area": "7,65",
+          "bloco": "302F0423",
+          "pagina": 0,
+          "plantio": "2023",
+          "talhao": "6",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 6,
+          "_origem": "sequencia_tabela",
+          "area": "2,37",
+          "bloco": "302F0423",
+          "pagina": 0,
+          "plantio": "2023",
+          "talhao": "7",
+          "variedade": "RB855156"
+        }
+      ]
+    },
+    {
+      "bloco": "302F0397",
+      "talhoes": [
+        {
+          "_lado": "unico",
+          "_linha_tabela": 0,
+          "_origem": "ocr_espacial",
+          "area": "6,03",
+          "bloco": "302F0397",
+          "pagina": 0,
+          "plantio": "2023",
+          "talhao": "1",
+          "variedade": "RB855156"
+        },
+        {
+          "_lado": "unico",
+          "_linha_tabela": 1,
+          "_origem": "ocr_espacial",
+          "area": "6,62",
+          "bloco": "302F0397",
+          "pagina": 0,
+          "plantio": "05/03/2026",
+          "talhao": "3",
+          "variedade": "RB855156"
+        }
+      ]
+    }
+  ],
+  "confianca": {
+    "geral": 0.75,
+    "metadata": 0.5,
+    "talhoes": 1
+  },
+  "metadata": {
+    "bloco": "",
+    "propriedade": "Fazenda Monte Libano"
+  },
+  "paginas": [
+    {
+      "estrutura_tabela": {
+        "clusters": 2,
+        "regioes": 3
+      },
+      "linhas": 65,
+      "pagina": 0,
+      "palavras_ocr": 355,
+      "tabelas": 3,
+      "talhoes_extraidos": 30,
+      "texto": "BL-302F0790 8050280225] TT [TT]\nTalhão Area(ha)| Plantio | Talhão Area(ha)| [ Plantio |\nRB855156 | 7,31 [05/03/2026 RB855156 2023\nRB855156 | 6,39 [05/03/2026 RB855156 2023\nRB855156 | 5,31 [05/03/2026 RB855156 2023\nRB855156 | 11,68 [05/03/2026 4 | RB855156 2023\nRB855156 | 8,89 [05/03/2026 RB855156 2023\n” 6 | RB855156 | 13,57 [05/03/2026|| 6 | RB855156 2023\nRB855156 | 5,32 [05/03/2026 RB855156 2023\n8 | | 192\n\"9 | RB855156 | 242 [05/03/2026] —\nRB855156 | 4,63 [05/03/2026] [7777777 Bi W/W\n| sos | Talhão [ Variedade | Areatha) | Plantio |\nRB655156 | | 3,64 [05/03/2026\nRBS5156 | 5,87 [05/09/2026 4\nRB855156 | 1143 [TT [Ts mm) | | g\nRB855156 | 5,55 [05/03/2026 &\nRB855156 | 8,27 [05/03/2026 E\nRB855156 | 5,32 [05/03/2026 5\nRB855156 | 9,92 [05/03/2026\nRB855156 | 5,85 [05/03/2026 Í\nRB855156 | 7,14 [05/03/2026 Fant 7\nRB855156 | 0,69 [05/03/2026 LF. Ph 2.37ha\nE DR ee E A |\" }\n]\n4 (| i\n{ ( [ À\n<A\nIN pp Ra » N \\ i}\nss D \\ > ) |\nE % %, ae\n16 MN 4 A À\nQ, 8,27ha 18 2 ] 3\n4 9,92ha E, Hy ) 2\nBL-302F0388 ão | 11,68ha ANE © y 5 O\nva \\ | x\nZ : fee | CURRAL OM =\nry\n8,89ha NY WIS §\nG LE ENA\n7\nim [vm &\n3\nGre APP LN LN NE << A APP 2,75ha ha 2\nUSD A LF. 0,69ha/ APP N \\ a 0 v\n= 4,63ha\n2 8 ss: APP\nBL-302P0005 =\n42ha\nO x\n659 Anores\nRESUMO DE AREAS (ha)\nArea de Cana 189,89\nArea de Carreador 9,66\nRede de Alta Tensão 0,46\nÁrea Total 200,03\neer Bloco: Si Mapa Mapa 7 de Safra 2027/28 Area ‘ de Cana: 189,89 ha ou 78,47 alq. oca . ização x\nTe ereos pam 9,66 ha cu 3.99 ala. ND\" PRO\nWA iz Proprietário: Aparecido deAndrade de Andrade Careadr (6 9 . 484% 4,84 % a. o a a\nUn. Gestora: Propriedade: ‘ . bi : ra é gal gm DS an\nJose só | Monte Libano 200,03 ha ou 82,66 ala. PM É |\n» Municipio: Levantamento: Data último desenho | Escala: Decliv. Média: o q e\nCJATLAS JATLAS 1910812026. [1717-500 [1.117.500 |\nagrimensura & topografia Distancia até Unidade Gestora | (km): | Tipo | Desenho: armuraimeita_[20°37'22,789\"S/ Latitude / Longitude (Sirgas - 2000) ae taco À 3 GG SS |\nane ram Gomvencionat 48°38'09-148'W PN ere NE"
+    }
+  ],
+  "propriedade": "Fazenda Monte Libano",
+  "status_validacao": "ATENCAO",
+  "sucesso": true,
+  "talhoes": [
+    {
+      "_lado": "unico",
+      "_linha_tabela": 0,
+      "_origem": "sequencia_tabela",
+      "area": "7,31",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "1",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 1,
+      "_origem": "sequencia_tabela",
+      "area": "6,39",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "2",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 2,
+      "_origem": "sequencia_tabela",
+      "area": "5,31",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "3",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 3,
+      "_origem": "sequencia_tabela",
+      "area": "11,68",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "4",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 4,
+      "_origem": "sequencia_tabela",
+      "area": "8,89",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "5",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 5,
+      "_origem": "sequencia_tabela",
+      "area": "13,57",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "6",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 6,
+      "_origem": "sequencia_tabela",
+      "area": "5,32",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "7",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 7,
+      "_origem": "sequencia_tabela",
+      "area": "1,92",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "8",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 8,
+      "_origem": "sequencia_tabela",
+      "area": "2,42",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "9",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 9,
+      "_origem": "sequencia_tabela",
+      "area": "4,63",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "10",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 10,
+      "_origem": "sequencia_tabela",
+      "area": "2,75",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "11",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 11,
+      "_origem": "sequencia_tabela",
+      "area": "3,64",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "12",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 12,
+      "_origem": "sequencia_tabela",
+      "area": "5,87",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "13",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 13,
+      "_origem": "sequencia_tabela",
+      "area": "11,43",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "14",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 14,
+      "_origem": "sequencia_tabela",
+      "area": "5,55",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "15",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 15,
+      "_origem": "sequencia_tabela",
+      "area": "8,27",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "16",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 16,
+      "_origem": "sequencia_tabela",
+      "area": "5,32",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "17",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 17,
+      "_origem": "sequencia_tabela",
+      "area": "9,92",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "18",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 18,
+      "_origem": "sequencia_tabela",
+      "area": "5,85",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "19",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 19,
+      "_origem": "sequencia_tabela",
+      "area": "7,14",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "20",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 20,
+      "_origem": "sequencia_tabela",
+      "area": "0,69",
+      "bloco": "302F0790",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "21",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 0,
+      "_origem": "sequencia_tabela",
+      "area": "4,81",
+      "bloco": "302F0423",
+      "pagina": 0,
+      "plantio": "2023",
+      "talhao": "1",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 1,
+      "_origem": "sequencia_tabela",
+      "area": "7,59",
+      "bloco": "302F0423",
+      "pagina": 0,
+      "plantio": "2023",
+      "talhao": "2",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 2,
+      "_origem": "sequencia_tabela",
+      "area": "7,88",
+      "bloco": "302F0423",
+      "pagina": 0,
+      "plantio": "2023",
+      "talhao": "3",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 3,
+      "_origem": "sequencia_tabela",
+      "area": "5,75",
+      "bloco": "302F0423",
+      "pagina": 0,
+      "plantio": "2023",
+      "talhao": "4",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 4,
+      "_origem": "sequencia_tabela",
+      "area": "7,32",
+      "bloco": "302F0423",
+      "pagina": 0,
+      "plantio": "2023",
+      "talhao": "5",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 5,
+      "_origem": "sequencia_tabela",
+      "area": "7,65",
+      "bloco": "302F0423",
+      "pagina": 0,
+      "plantio": "2023",
+      "talhao": "6",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 6,
+      "_origem": "sequencia_tabela",
+      "area": "2,37",
+      "bloco": "302F0423",
+      "pagina": 0,
+      "plantio": "2023",
+      "talhao": "7",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 0,
+      "_origem": "ocr_espacial",
+      "area": "6,03",
+      "bloco": "302F0397",
+      "pagina": 0,
+      "plantio": "2023",
+      "talhao": "1",
+      "variedade": "RB855156"
+    },
+    {
+      "_lado": "unico",
+      "_linha_tabela": 1,
+      "_origem": "ocr_espacial",
+      "area": "6,62",
+      "bloco": "302F0397",
+      "pagina": 0,
+      "plantio": "05/03/2026",
+      "talhao": "3",
+      "variedade": "RB855156"
+    }
+  ],
+  "validacao": {
+    "avisos": [],
+    "erros": [
+      "Campo obrigatório ausente: bloco"
+    ],
+    "talhoes_incompletos": 0,
+    "total_talhoes": 30,
+    "valido": false
+  }
+}
