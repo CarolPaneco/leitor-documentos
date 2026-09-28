@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 
@@ -10,7 +11,9 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>Leitor de Documentos</title>
+    <title>
+        IA Documentos Agrícolas
+    </title>
 
     <link
         rel="stylesheet"
@@ -19,92 +22,87 @@
 
 </head>
 
-
 <body>
 
-    <main class="container">
+<div class="app">
 
+    <header class="topbar">
 
-        <!-- =====================================================
-             CABEÇALHO
-        ====================================================== -->
-
-        <section class="header">
+        <div>
 
             <h1>
-                Leitor de Documentos
+                IA Documentos Agrícolas
             </h1>
 
             <p>
-                Envie um PDF ou imagem para extrair automaticamente
-                as informações do documento.
+                Extração inteligente de documentos
             </p>
 
-        </section>
+        </div>
+
+        <div
+            id="statusIA"
+            class="status"
+        >
+            IA pronta
+        </div>
+
+    </header>
 
 
-
-        <!-- =====================================================
-             UPLOAD
-        ====================================================== -->
+    <main>
 
         <section class="upload-card">
 
-            <form
-                id="uploadForm"
-                enctype="multipart/form-data"
+            <h2>
+                Enviar documento
+            </h2>
+
+            <p>
+                PDF ou imagem
+            </p>
+
+            <div
+                id="dropzone"
+                class="dropzone"
             >
 
-                <div class="upload-area">
+                <input
+                    type="file"
+                    id="arquivo"
+                    accept=".pdf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff"
+                    hidden
+                >
 
-                    <input
-                        type="file"
-                        id="arquivo"
-                        name="arquivo"
-                        accept=".pdf,.png,.jpg,.jpeg,.tiff"
-                    >
-
-                    <label for="arquivo">
-
-                        <div class="upload-icon">
-                            📄
-                        </div>
-
-                        <h2>
-                            Selecione um documento
-                        </h2>
-
-                        <p>
-                            PDF, PNG, JPG, JPEG ou TIFF
-                        </p>
-
-                    </label>
-
+                <div class="drop-icon">
+                    📄
                 </div>
 
+                <strong>
+                    Clique para selecionar
+                </strong>
 
-                <div
-                    id="nomeSelecionado"
-                    class="nome-selecionado"
-                ></div>
+                <span>
+                    ou arraste o documento aqui
+                </span>
 
+            </div>
 
-                <button
-                    type="submit"
-                    id="btnProcessar"
-                >
-                    Escanear documento
-                </button>
+            <div
+                id="arquivoSelecionado"
+                class="arquivo-selecionado"
+            >
+            </div>
 
-            </form>
+            <button
+                id="btnProcessar"
+                class="btn-primary"
+            >
+                Processar documento
+            </button>
 
         </section>
 
-
-
-        <!-- =====================================================
-             LOADING
-        ====================================================== -->
 
         <section
             id="loading"
@@ -113,124 +111,17 @@
 
             <div class="spinner"></div>
 
+            <h3>
+                A IA está analisando o documento...
+            </h3>
+
             <p>
-                Processando documento...
+                Estamos identificando layout,
+                tabelas e informações agrícolas.
             </p>
 
         </section>
 
-
-
-        <!-- =====================================================
-             CHECK-IN
-        ====================================================== -->
-
-        <section
-            id="checkin"
-            class="checkin hidden"
-        >
-
-            <div class="checkin-header">
-
-                <div>
-
-                    <h2>
-                        Check-in do documento
-                    </h2>
-
-                    <p>
-                        Verificação das informações obrigatórias
-                    </p>
-
-                </div>
-
-
-                <div
-                    id="checkinPercentual"
-                    class="checkin-percentual"
-                >
-                    0%
-                </div>
-
-            </div>
-
-
-
-            <!-- RESUMO -->
-
-            <div
-                id="checkinResumo"
-                class="checkin-resumo"
-            >
-
-                <div class="checkin-resumo-item">
-
-                    <span class="resumo-numero" id="camposEncontrados">
-                        0
-                    </span>
-
-                    <span class="resumo-label">
-                        Encontrados
-                    </span>
-
-                </div>
-
-
-                <div class="checkin-resumo-item">
-
-                    <span class="resumo-numero" id="camposFaltantes">
-                        0
-                    </span>
-
-                    <span class="resumo-label">
-                        Faltantes
-                    </span>
-
-                </div>
-
-
-                <div
-                    id="statusCheckin"
-                    class="checkin-status"
-                >
-                    Verificando...
-                </div>
-
-            </div>
-
-
-
-            <!-- CAMPOS -->
-
-            <div
-                id="listaCheckin"
-                class="lista-checkin"
-            ></div>
-
-
-
-            <!-- CAMPOS FALTANTES -->
-
-            <div
-                id="alertaFaltantes"
-                class="alerta-faltantes hidden"
-            >
-
-                <h3>
-                    ⚠️ Informações não identificadas
-                </h3>
-
-                <p id="listaFaltantes"></p>
-
-            </div>
-
-        </section>
-
-
-
-        <!-- =====================================================
-             RESULTADO OCR
-        ====================================================== -->
 
         <section
             id="resultado"
@@ -242,59 +133,163 @@
                 <div>
 
                     <h2>
-                        Texto encontrado
+                        Resultado da IA
                     </h2>
 
-                    <span id="nomeArquivo"></span>
+                    <p id="nomeDocumento">
+                    </p>
 
                 </div>
 
-
                 <a
-                    id="download"
-                    class="download-button"
+                    id="btnDownload"
+                    class="btn-download"
                     href="#"
                 >
-                    Baixar TXT
+                    Baixar Excel
                 </a>
 
             </div>
 
 
-            <textarea
-                id="texto"
-                readonly
-            ></textarea>
+            <div
+                id="alertas"
+                class="alertas"
+            >
+            </div>
+
+
+            <div class="cards">
+
+                <div class="info-card">
+
+                    <span>
+                        Blocos
+                    </span>
+
+                    <strong id="totalBlocos">
+                        0
+                    </strong>
+
+                </div>
+
+                <div class="info-card">
+
+                    <span>
+                        Talhões
+                    </span>
+
+                    <strong id="totalTalhoes">
+                        0
+                    </strong>
+
+                </div>
+
+                <div class="info-card">
+
+                    <span>
+                        Correções
+                    </span>
+
+                    <strong id="totalCorrecoes">
+                        0
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <div class="metadata">
+
+                <h3>
+                    Informações do documento
+                </h3>
+
+                <div
+                    id="metadataGrid"
+                    class="metadata-grid"
+                >
+                </div>
+
+            </div>
+
+
+            <div class="tabelas">
+
+                <h3>
+                    Talhões identificados
+                </h3>
+
+                <div
+                    id="tabelasBlocos"
+                >
+                </div>
+
+            </div>
 
         </section>
 
 
+        <section class="learning-card">
 
-        <!-- =====================================================
-             ERRO
-        ====================================================== -->
+            <div>
 
-        <section
-            id="erro"
-            class="erro hidden"
-        >
+                <h2>
+                    🧠 Aprendizado da IA
+                </h2>
 
-            <h3>
-                Erro
-            </h3>
+                <p>
+                    Cada correção realizada será armazenada
+                    para formar o dataset da nossa IA.
+                </p>
 
-            <p id="mensagemErro"></p>
+            </div>
+
+            <div
+                id="estatisticas"
+                class="estatisticas"
+            >
+
+                <div>
+                    <strong id="statDocs">
+                        0
+                    </strong>
+                    <span>
+                        documentos
+                    </span>
+                </div>
+
+                <div>
+                    <strong id="statExtracoes">
+                        0
+                    </strong>
+                    <span>
+                        extrações
+                    </span>
+                </div>
+
+                <div>
+                    <strong id="statCorrecoes">
+                        0
+                    </strong>
+                    <span>
+                        correções
+                    </span>
+                </div>
+
+            </div>
 
         </section>
-
 
     </main>
 
+</div>
 
 
-    <script
-        src="{{ url_for('static', filename='js/script.js') }}"
-    ></script>
+<script
+    src="{{ url_for('static', filename='js/script.js') }}"
+></script>
 
 </body>
 

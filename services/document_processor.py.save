@@ -1,0 +1,354 @@
+
+import os
+import json
+import re
+import traceback
+
+
+from config import RESULT_FOLDER, CPU_THREADS
+
+
+class DocumentProcessor:
+
+    def __init__(self):
+        print("Inicializando PP-StructureV3...")
+
+        self.pipeline = PPStructureV3(
+            device="cpu",
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+            use_table_recognition=True,
+            use_formula_recognition=False,
+            use_chart_recognition=False,
+            use_region_detection=True,
+            enable_mkldnn=True,
+            cpu_threads=CPU_THREADS
+        )
+
+        print("PP-StructureV3 pronto.")
+
+    def processar(self, arquivo, nome_base):
+
+        pasta_saida = os.path.join(
+            RESULT_FOLDER,
+            nome_base
+        )
+
+        os.makedirs(
+            pasta_saida,
+            exist_ok=True
+        )
+
+        resultados = []
+
+        try:
+            print("=" * 70)
+            print("PROCESSANDO:", arquivo)
+            print("=" * 70)
+
+            output = self.pipeline.predict(arquivo)
+
+            for indice, res in enumerate(output):
+
+                print(
+                    f"Processando página/resultado {indice + 1}"
+                )
+
+                try:
+                    res.save_to_json(
+                        save_path=pasta_saida
+                    )
+                except Exception as e:
+                    print(
+                        "Aviso ao salvar JSON:",
+                        e
+                    )
+
+                try:
+                    res.save_to_markdown(
+                        save_path=pasta_saida
+                    )
+                except Exception as e:
+                    print(
+                        "Aviso ao salvar Markdown:",
+                        e
+                    )
+
+                dados = self._extrair_dados_resultado(
+                    res
+                )
+
+                resultados.append(
+                    dados
+                )
+
+            return {
+                "sucesso": True,
+                "pasta_saida": pasta_saida,
+                "paginas": resultados
+            }
+
+        except Exception as e:
+
+            traceback.print_exc()
+
+            return {
+                "sucesso": False,
+                "erro": str(e),
+                "pasta_saida": pasta_saida,
+                "paginas": []
+            }
+
+    def _extrair_dados_resultado(self, res):
+
+        dados = {
+            "input_path": None,
+            "page_index": None,
+            "ocr": [],
+            "layout": [],
+            "tabelas": [],
+            "markdown": ""
+        }
+
+        # --------------------------------------------------
+        # INPUT
+        # --------------------------------------------------
+
+        try:
+            dados["input_path"] = getattr(
+                res,
+                "input_path",
+                None
+            )
+        except Exception:
+            pass
+
+        try:
+            dados["page_index"] = getattr(
+                res,
+                "page_index",
+                None
+            )
+        except Exception:
+            pass
+
+        # --------------------------------------------------
+        # OCR
+        # --------------------------------------------------
+
+        try:
+
+            ocr = getattr(
+                res,
+                "overall_ocr_res",
+                None
+            )
+
+            if ocr:
+
+                textos = ocr.get(
+                    "rec_texts",
+                    []
+                )
+
+                scores = ocr.get(
+                    "rec_scores",
+                    []
+                )
+
+                boxes = ocr.get(
+                    "rec_boxes",
+                    []
+                )
+
+                for i, texto in enumerate(textos):
+
+                    score = (
+                        scores[i]
+                        if i < len(scores)
+                        else 0
+                    )
+
+                    box = (
+                        boxes[i]
+                        if i < len(boxes)
+                        else None
+                    )
+
+                    dados["ocr"].append({
+                        "texto": str(texto),
+                        "confianca": float(score),
+                        "box": self._serializar(box)
+                    })
+
+        except Exception as e:
+
+            print(
+                "Erro OCR estruturado:",
+                e
+            )
+
+        # --------------------------------------------------
+        # LAYOUT
+        # --------------------------------------------------
+
+        try:
+
+            parsing = getattr(
+                res,
+                "parsing_res_list",
+                []
+            )
+
+            for item in parsing:
+
+                dados["layout"].append({
+                    "tipo": item.get(
+                        "block_label",
+                        ""
+                    ),
+                    "bbox": self._serializar(
+                        item.get(
+                            "block_bbox"
+                        )
+                    ),
+                    "conteudo": item.get(
+                        "block_content",
+                        ""
+                    )
+                })
+
+        except Exception as e:
+
+            print(
+                "Erro layout:",
+                e
+            )
+
+        # --------------------------------------------------
+        # TABELAS
+        # --------------------------------------------------
+
+        try:
+
+            tabelas = getattr(
+                res,
+                "table_res_list",
+                []
+            )
+
+            for tabela in tabelas:
+
+                html = tabela.get(
+                    "pred_html",
+                    ""
+                )
+
+                textos = tabela.get(
+                    "table_ocr_pred",
+                    {}
+                )
+
+                dados["tabelas"].append({
+                    "html": html,
+                    "ocr": self._serializar(
+                        textos
+                    ),
+                    "celulas": self._serializar(
+                        tabela.get(                            "cell_box_list",
+                            []
+                        )
+                    )
+                })
+
+        except Exception as e:
+
+            print(
+                "Erro tabelas:",
+                e
+            )
+
+        # --------------------------------------------------
+        # MARKDOWN
+        # --------------------------------------------------
+
+        try:
+
+            markdown = getattr(
+                res,
+                "markdown",
+                None
+            )
+
+            if markdown:
+
+                if isinstance(
+                    markdown,
+                    dict
+                ):
+                    dados["markdown"] = (
+                        markdown.get(
+                            "markdown_text",
+                            ""
+                        )
+                    )
+
+                elif isinstance(
+                    markdown,
+                    str
+                ):
+                    dados["markdown"] = markdown
+
+        except Exception:
+            pass
+
+        return dados
+
+    def _serializar(self, valor):
+
+        if valor is None:
+            return None
+
+        if hasattr(
+            valor,
+            "tolist"
+        ):
+            try:
+                return valor.tolist()
+            except Exception:
+                pass
+
+        if isinstance(
+            valor,
+            list
+        ):
+            return [
+                self._serializar(v)
+                for v in valor
+            ]
+
+        if isinstance(
+            valor,
+            dict
+        ):
+            return {
+                k: self._serializar(v)
+                for k, v in valor.items()
+            }
+
+        return valor
+
+
+_processor = None
+
+
+def get_processor():
+
+    global _processor
+
+    if _processor is None:
+        _processor = DocumentProcessor()
+
+    return _processor
+
