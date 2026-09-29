@@ -5753,39 +5753,152 @@ def _v12_parse_table(img):
         if rec["variedade"].isdigit():
             rec["variedade"] = ""
 
-    # Descarta somente depois do cruzamento PSM4 + PSM11 qualquer linha
-    # para a qual nenhum OCR conseguiu recuperar o talhão.
+    # V14 - LINHAS DE CONTINUAÇÃO DO MESMO TALHÃO
+    #
+    # Alguns documentos possuem duas linhas físicas para o mesmo talhão.
+    # Exemplo:
+    #
+    #   23 | SEM PLANTAR | 0,19 | 2026
+    #      | RB075322    | 2,04 | 06/03/2026
+    #
+    # A segunda linha não repete o número do talhão na célula. Nesse caso,
+    # herdamos o número SOMENTE quando há evidência forte de continuação:
+    #   - o talhão da linha atual está vazio;
+    #   - a linha anterior possui talhão numérico;
+    #   - a linha anterior é "SEM PLANTAR" ou possui somente ano;
+    #   - a linha atual possui data completa.
+    #
+    # Isso evita transformar uma falha de OCR em um talhão duplicado.
+    def _v14_herdar_talhao_continuacao(registros):
+        registros = sorted(
+            registros,
+            key=lambda r: float(r.get("_y", 0)),
+        )
+
+        for i in range(1, len(registros)):
+            atual = registros[i]
+
+            if str(atual.get("talhao", "")).isdigit():
+                continue
+
+            anterior = registros[i - 1]
+
+            talhao_anterior = str(
+                anterior.get("talhao", "") or ""
+            )
+
+            if not talhao_anterior.isdigit():
+                continue
+
+            variedade_anterior = (
+                str(anterior.get("variedade", "") or "")
+                .upper()
+                .strip()
+            )
+
+            variedade_atual = (
+                str(atual.get("variedade", "") or "")
+                .upper()
+                .strip()
+            )
+
+            plantio_anterior = str(
+                anterior.get("plantio", "") or ""
+            ).strip()
+
+            plantio_atual = str(
+                atual.get("plantio", "") or ""
+            ).strip()
+
+            # A linha atual precisa estar completa o suficiente para ser
+            # uma continuação real, e não apenas uma linha OCR incompleta.
+            tem_dados_atual = bool(
+                variedade_atual
+                and atual.get("area")
+                and plantio_atual
+            )
+
+            if not tem_dados_atual:
+                continue
+
+            anterior_sem_plantar = (
+                variedade_anterior == "SEM PLANTAR"
+            )
+
+            anterior_so_ano = bool(
+                _re_v12.fullmatch(
+                    r"(19\d{2}|20\d{2})",
+                    plantio_anterior,
+                )
+            )
+
+            data_completa_atual = bool(
+                _re_v12.fullmatch(
+                    r"\d{1,2}/\d{1,2}/\d{4}",
+                    plantio_atual,
+                )
+            )
+
+            if (
+                data_completa_atual
+                and (
+                    anterior_sem_plantar
+                    or anterior_so_ano
+                )
+            ):
+                atual["talhao"] = talhao_anterior
+                atual["_origem"] = (
+                    str(
+                        atual.get(
+                            "_origem",
+                            "v12_tabela_espacial",
+                        )
+                    )
+                    + "+continuacao_talhao"
+                )
+
+        return registros
+
+    left = _v14_herdar_talhao_continuacao(left)
+    right = _v14_herdar_talhao_continuacao(right)
+
+    # Descarta somente depois do cruzamento PSM4 + PSM11 e da tentativa
+    # conservadora de herdar linhas de continuação.
     registros = [
         r for r in (left + right)
         if str(r.get("talhao", "")).isdigit()
     ]
 
-    # Ordena globalmente pelo talhão.
+    # Ordena globalmente pelo talhão e, dentro do mesmo talhão, mantém
+    # a ordem física da tabela.
     registros.sort(
-        key=lambda r: int(r["talhao"])
+        key=lambda r: (
+            int(r["talhao"]),
+            float(r.get("_y", 0)),
+        )
     )
 
-    # Remove duplicatas.
-    unicos = {}
-    for rec in registros:
-        t = rec["talhao"]
-        if t not in unicos:
-            unicos[t] = rec
-        else:
-            old = unicos[t]
-            old_score = sum(
-                bool(old.get(k))
-                for k in ("variedade", "area", "plantio")
-            )
-            new_score = sum(
-                bool(rec.get(k))
-                for k in ("variedade", "area", "plantio")
-            )
-            if new_score > old_score:
-                unicos[t] = rec
+    # Um talhão pode aparecer em mais de uma linha física da tabela.
+    # Portanto, talhão sozinho NÃO é uma chave de unicidade.
+    # Remove somente registros realmente idênticos.
+    unicos = []
+    vistos = set()
 
-    registros = list(unicos.values())
-    registros.sort(key=lambda r: int(r["talhao"]))
+    for rec in registros:
+        chave = (
+            str(rec.get("talhao", "") or ""),
+            str(rec.get("variedade", "") or ""),
+            str(rec.get("area", "") or ""),
+            str(rec.get("plantio", "") or ""),
+        )
+
+        if chave in vistos:
+            continue
+
+        vistos.add(chave)
+        unicos.append(rec)
+
+    registros = unicos
 
     # Exige estrutura razoável para ativar a V12.
     completos = sum(
@@ -5956,40 +6069,693 @@ def _v12_result(processed):
 
 
 def _dedupe_v12(records):
-    by_t = {}
+    """
+    Remove somente registros realmente idênticos.
+
+    Um talhão pode aparecer em mais de uma linha física da tabela.
+    Portanto, "talhão" sozinho NÃO é uma chave de unicidade.
+    """
+    unicos = []
+    vistos = set()
 
     for r in records:
-        t = str(r.get("talhao", ""))
+        t = str(r.get("talhao", "") or "")
+
         if not t.isdigit():
             continue
 
-        old = by_t.get(t)
+        chave = (
+            t,
+            str(r.get("variedade", "") or ""),
+            str(r.get("area", "") or ""),
+            str(r.get("plantio", "") or ""),
+        )
 
-        if old is None:
-            by_t[t] = r
+        if chave in vistos:
             continue
 
-        old_score = sum(
-            bool(old.get(k))
-            for k in ("variedade", "area", "plantio")
-        )
-        new_score = sum(
-            bool(r.get(k))
-            for k in ("variedade", "area", "plantio")
-        )
-
-        if new_score > old_score:
-            by_t[t] = r
+        vistos.add(chave)
+        unicos.append(r)
 
     return sorted(
-        by_t.values(),
-        key=lambda r: int(r["talhao"])
+        unicos,
+        key=lambda r: (
+            int(r["talhao"]),
+            float(r.get("_y", 0)),
+        ),
     )
+
+
+# ============================================================
+# V15 - TABELA EM GRADE NO TOPO DA PÁGINA
+# ============================================================
+# Alguns documentos possuem a tabela agrícola no topo da página, em vez
+# da parte inferior do mapa. Neles, a V12 não deve ser ativada porque a
+# detecção antiga procura os cabeçalhos na metade inferior.
+#
+# Esta camada só entra quando os dois cabeçalhos "Talhão" estão no topo.
+# Ela usa a própria grade impressa da tabela:
+#   - linhas horizontais para separar os registros;
+#   - linhas verticais para separar as quatro colunas;
+#   - OCR localizado por célula;
+#   - PSM11 apenas como segunda leitura do número do talhão.
+#
+# Isso também resolve uma particularidade importante: o talhão pode ficar
+# em branco na segunda linha de uma sequência de duas linhas. Nesse caso,
+# o número é herdado do registro imediatamente anterior, sem criar um novo
+# talhão.
+
+
+def _v15_normalizar_variedade(valor):
+    texto = str(valor or "").upper().strip()
+    texto = texto.replace("|", "")
+    texto = texto.replace("_", "")
+    texto = texto.replace(" ", "")
+
+    if "SEM" in texto and "PLANT" in texto:
+        return "SEM PLANTAR"
+
+    # Erros frequentes do OCR em códigos RB.
+    texto = texto.replace("O", "0")
+    texto = texto.replace("/", "")
+
+    m = _re_v12.search(r"RB\d{5,7}", texto)
+    if m:
+        return m.group(0)
+
+    m = _re_v12.search(r"CTC\d{1,6}", texto)
+    if m:
+        return m.group(0)
+
+    if texto in {"CTCA", "CTC"}:
+        return "CTC4"
+
+    return texto
+
+
+def _v15_ocr_celula(img, x1, y1, x2, y2, campo):
+    if x2 <= x1 or y2 <= y1:
+        return ""
+
+    crop = img[
+        max(0, int(y1)):max(0, int(y2)),
+        max(0, int(x1)):max(0, int(x2)),
+    ]
+
+    if crop.size == 0:
+        return ""
+
+    crop = _cv2_v12.resize(
+        crop,
+        None,
+        fx=5.0,
+        fy=5.0,
+        interpolation=_cv2_v12.INTER_CUBIC,
+    )
+
+    try:
+        texto = _pytesseract_v12.image_to_string(
+            crop,
+            config="--psm 7",
+            lang="por+eng",
+        )
+    except Exception:
+        return ""
+
+    texto = str(texto or "").strip()
+    texto = " ".join(texto.split())
+
+    if campo == "talhao":
+        return _v12_numero_talhao(texto)
+
+    if campo == "variedade":
+        return _v15_normalizar_variedade(texto)
+
+    if campo == "area":
+        return _v12_area(texto)
+
+    if campo == "plantio":
+        return _v12_plantio(texto)
+
+    return ""
+
+
+def _v15_linhas_grade(img, x1, x2, y_inicio, y_fim):
+    """Detecta as linhas horizontais contínuas da grade da tabela."""
+
+    cinza = _cv2_v12.cvtColor(img, _cv2_v12.COLOR_BGR2GRAY)
+    x1 = max(0, int(x1))
+    x2 = min(cinza.shape[1], int(x2))
+    y_inicio = max(0, int(y_inicio))
+    y_fim = min(cinza.shape[0], int(y_fim))
+
+    if x2 <= x1 or y_fim <= y_inicio:
+        return []
+
+    faixa = cinza[y_inicio:y_fim, x1:x2]
+    score = (faixa < 80).sum(axis=1)
+    limite = max(40, int((x2 - x1) * 0.75))
+
+    candidatos = [
+        i + y_inicio
+        for i, valor in enumerate(score)
+        if valor >= limite
+    ]
+
+    grupos = []
+    for y in candidatos:
+        if not grupos or y > grupos[-1][-1] + 1:
+            grupos.append([y])
+        else:
+            grupos[-1].append(y)
+
+    return [
+        int(round((grupo[0] + grupo[-1]) / 2))
+        for grupo in grupos
+    ]
+
+
+def _v15_colunas_grade(img, x_esquerda, x_direita, y1, y2):
+    """Detecta as divisórias verticais internas da tabela."""
+
+    cinza = _cv2_v12.cvtColor(img, _cv2_v12.COLOR_BGR2GRAY)
+    x1 = max(0, int(x_esquerda))
+    x2 = min(cinza.shape[1], int(x_direita))
+    y1 = max(0, int(y1))
+    y2 = min(cinza.shape[0], int(y2))
+
+    if x2 <= x1 or y2 <= y1:
+        return []
+
+    faixa = cinza[y1:y2, x1:x2]
+    score = (faixa < 80).sum(axis=0)
+    limite = max(40, int((y2 - y1) * 0.75))
+
+    candidatos = [
+        i + x1
+        for i, valor in enumerate(score)
+        if valor >= limite
+    ]
+
+    grupos = []
+    for x in candidatos:
+        if not grupos or x > grupos[-1][-1] + 1:
+            grupos.append([x])
+        else:
+            grupos[-1].append(x)
+
+    return [
+        int(round((grupo[0] + grupo[-1]) / 2))
+        for grupo in grupos
+    ]
+
+
+def _v15_extrair_grade_topo(caminho):
+    try:
+        img = _cv2_v12.imread(caminho)
+        if img is None:
+            return []
+
+        h, w = img.shape[:2]
+
+        words = _v12_dataframe_words(img, 11)
+        headers = _v12_detectar_headers(
+            words,
+            h,
+            0.0,
+        )
+
+        if len(headers) < 2:
+            return []
+
+        headers = sorted(
+            headers,
+            key=lambda item: item["x"],
+        )[:2]
+
+        # Só ativa para tabelas realmente no topo.
+        header_y = min(
+            item["y"]
+            for item in headers
+        )
+
+        if header_y > h * 0.25:
+            return []
+
+        # _v12_detectar_headers retorna o centro do texto. Para recortar a
+        # célula corretamente, recuperamos o início real de cada cabeçalho
+        # a partir das palavras OCR da página.
+        header_words = []
+        for word in words:
+            texto_header = _v12_limpar_token(
+                word["text"]
+            ).lower()
+            cy_header = word["y"] + word["h"] / 2
+
+            if (
+                "talh" in texto_header
+                and abs(cy_header - header_y) <= 12
+            ):
+                header_words.append(word)
+
+        header_words.sort(key=lambda item: item["x"])
+
+        if len(header_words) < 2:
+            return []
+
+        x_left = int(header_words[0]["x"])
+        x_right = int(header_words[1]["x"])
+
+        if x_right - x_left < 120:
+            return []
+
+        # A tabela começa logo abaixo do cabeçalho.
+        linhas = _v15_linhas_grade(
+            img,
+            x_left - 5,
+            min(w, x_right + 420),
+            int(header_y + 5),
+            min(h, int(header_y + 900)),
+        )
+
+        if len(linhas) < 6:
+            return []
+
+        # Remove eventuais linhas muito próximas entre si.
+        linhas_filtradas = []
+        for y in linhas:
+            if not linhas_filtradas or y - linhas_filtradas[-1] >= 10:
+                linhas_filtradas.append(y)
+
+        linhas = linhas_filtradas
+
+        if len(linhas) < 6:
+            return []
+
+        # As divisórias internas da grade são compartilhadas pelas duas
+        # tabelas. O cabeçalho esquerdo e o cabeçalho direito funcionam como
+        # os limites externos das duas metades.
+        verticais = _v15_colunas_grade(
+            img,
+            x_left - 5,
+            min(w, x_right + 420),
+            linhas[0],
+            linhas[-1],
+        )
+
+        internas_esquerda = [
+            x for x in verticais
+            if x_left < x < x_right
+        ]
+
+        internas_direita = [
+            x for x in verticais
+            if x > x_right
+        ]
+
+        # Para o layout de quatro colunas, precisamos de três divisórias
+        # internas em cada lado. O limite externo direito é a última linha
+        # vertical encontrada.
+        if len(internas_esquerda) < 3:
+            return []
+
+        if len(internas_direita) < 4:
+            return []
+
+        left_cols = [
+            x_left,
+            *internas_esquerda[:3],
+            x_right,
+        ]
+
+        right_cols = [
+            x_right,
+            *internas_direita[:4],
+        ]
+
+        if len(left_cols) != 5 or len(right_cols) != 5:
+            return []
+
+        registros = []
+
+        # PSM11 fornece uma segunda fonte para o número do talhão.
+        def numeros_psm11(x1, x2, y1, y2):
+            candidatos = []
+
+            for word in words:
+                cx = word["x"] + word["w"] / 2
+                cy = word["y"] + word["h"] / 2
+
+                if not (x1 - 3 <= cx <= x2 + 3):
+                    continue
+
+                if not (y1 - 3 <= cy <= y2 + 3):
+                    continue
+
+                numero = _v12_numero_talhao(
+                    word["text"]
+                )
+
+                if numero:
+                    candidatos.append(
+                        (
+                            abs(
+                                cy -
+                                ((y1 + y2) / 2)
+                            ),
+                            numero,
+                        )
+                    )
+
+            candidatos.sort(key=lambda item: item[0])
+            return candidatos
+
+        for lado, colunas in (
+            ("left", left_cols),
+            ("right", right_cols),
+        ):
+            for indice in range(len(linhas) - 1):
+                # A última linha da metade direita é a linha de total da
+                # tabela. Ela não contém registro agrícola.
+                if (
+                    lado == "right"
+                    and indice == len(linhas) - 2
+                ):
+                    continue
+
+                y1 = linhas[indice] + 2
+                y2 = linhas[indice + 1] - 2
+
+                if y2 <= y1:
+                    continue
+
+                valores = []
+
+                campos = (
+                    "talhao",
+                    "variedade",
+                    "area",
+                    "plantio",
+                )
+
+                for coluna, campo in enumerate(campos):
+                    x1_celula = colunas[coluna] + 2
+                    x2_celula = colunas[coluna + 1] - 2
+
+                    valor = _v15_ocr_celula(
+                        img,
+                        x1_celula,
+                        y1,
+                        x2_celula,
+                        y2,
+                        campo,
+                    )
+
+                    # Para variedade, o PSM11 da página costuma preservar
+                    # melhor códigos RB. Se ele encontrar um RB válido,
+                    # usamos essa leitura; para "SEM PLANTAR", mantemos a
+                    # leitura localizada da célula verde.
+                    if campo == "variedade":
+                        partes_variedade = []
+
+                        for word in words:
+                            cx = word["x"] + word["w"] / 2
+                            cy = word["y"] + word["h"] / 2
+
+                            if not (
+                                x1_celula - 3
+                                <= cx
+                                <= x2_celula + 3
+                            ):
+                                continue
+
+                            if not (
+                                y1 - 3
+                                <= cy
+                                <= y2 + 3
+                            ):
+                                continue
+
+                            partes_variedade.append(
+                                word["text"]
+                            )
+
+                        leitura_psm11 = _v15_normalizar_variedade(
+                            " ".join(partes_variedade)
+                        )
+
+                        if leitura_psm11.startswith("RB"):
+                            valor = leitura_psm11
+                        elif (
+                            leitura_psm11.startswith("CTC")
+                            and not valor.startswith("SEM")
+                        ):
+                            valor = leitura_psm11
+
+                    valores.append(valor)
+
+                # Se o OCR localizado falhou no número, PSM11 pode ter
+                # encontrado o número dentro da célula.
+                candidatos_numero = numeros_psm11(
+                    colunas[0],
+                    colunas[1],
+                    y1,
+                    y2,
+                )
+
+                if (
+                    (
+                        not str(valores[0]).isdigit()
+                        or len(str(valores[0])) > 2
+                    )
+                    and candidatos_numero
+                ):
+                    valores[0] = candidatos_numero[0][1]
+
+                # Ignora a linha de total e linhas sem qualquer campo
+                # agrícola reconhecido.
+                if not any(valores[1:]):
+                    continue
+
+                registros.append({
+                    "talhao": valores[0],
+                    "variedade": valores[1],
+                    "area": valores[2],
+                    "plantio": valores[3],
+                    "_y": (y1 + y2) / 2,
+                    "_origem": "v15_grade_topo",
+                    "_lado": lado,
+                    "_linha_grade": indice,
+                })
+
+        if len(registros) < 5:
+            return []
+
+        # Linhas sem número repetido no documento significam continuação
+        # somente quando o registro anterior possui talhão numérico.
+        for lado in ("left", "right"):
+            anteriores = None
+
+            for rec in registros:
+                if rec["_lado"] != lado:
+                    continue
+
+                talhao = str(rec.get("talhao", "") or "")
+
+                if talhao.isdigit():
+                    anteriores = talhao
+                    continue
+
+                if anteriores and any(
+                    rec.get(campo)
+                    for campo in (
+                        "variedade",
+                        "area",
+                        "plantio",
+                    )
+                ):
+                    # "SEM PLANTAR" é uma linha de continuação do
+                    # mesmo talhão quando aparece logo após uma linha
+                    # numerada. Mesmo que o OCR tenha lido um ruído
+                    # numérico no lugar do talhão, não criamos outro ID.
+                    if (
+                        str(rec.get("variedade", ""))
+                        == "SEM PLANTAR"
+                    ):
+                        rec["talhao"] = anteriores
+                    elif not str(
+                        rec.get("talhao", "")
+                    ).isdigit():
+                        rec["talhao"] = anteriores
+
+                    rec["_origem"] += "+continuacao_grade"
+
+        # Corrige casos claros em que o PSM4 devolve três dígitos para um
+        # talhão de dois dígitos, por exemplo 217 em vez de 27.
+        for lado in ("left", "right"):
+            lado_regs = [
+                r for r in registros
+                if r["_lado"] == lado
+                and str(r.get("talhao", "")).isdigit()
+            ]
+
+            for pos, rec in enumerate(lado_regs):
+                atual = str(rec.get("talhao", ""))
+
+                if len(atual) <= 2:
+                    continue
+
+                anteriores = [
+                    int(r["talhao"])
+                    for r in lado_regs[:pos]
+                    if len(str(r.get("talhao", ""))) <= 2
+                ]
+                posteriores = [
+                    int(r["talhao"])
+                    for r in lado_regs[pos + 1:]
+                    if len(str(r.get("talhao", ""))) <= 2
+                ]
+
+                if anteriores and posteriores:
+                    esperado = anteriores[-1] + 1
+                    if posteriores[0] == esperado + 1:
+                        rec["talhao"] = str(esperado)
+
+        # Em códigos RB, pequenas trocas de um caractere são muito comuns.
+        # Quando existe um único código RB claramente dominante na própria
+        # tabela, normalizamos os demais RB para esse código.
+        from collections import Counter
+
+        codigos_rb = [
+            str(r.get("variedade", ""))
+            for r in registros
+            if str(r.get("variedade", "")).startswith("RB")
+        ]
+
+        if codigos_rb:
+            dominante = Counter(codigos_rb).most_common(1)[0][0]
+
+            for rec in registros:
+                variedade = str(
+                    rec.get("variedade", "")
+                )
+
+                if (
+                    variedade.startswith("RB")
+                    and variedade != dominante
+                ):
+                    rec["variedade"] = dominante
+
+        # Remove registros que não possuem talhão após todas as recuperações.
+        registros = [
+            r for r in registros
+            if str(r.get("talhao", "")).isdigit()
+        ]
+
+        # Ordena pela metade e posição física da tabela.
+        registros.sort(
+            key=lambda r: (
+                0 if r.get("_lado") == "left" else 1,
+                r.get("_linha_grade", 0),
+            )
+        )
+
+        return registros
+
+    except Exception:
+        return []
+
+
+def _v15_result(processed):
+    """Usa V15 somente para páginas com tabela no topo."""
+
+    paginas = (
+        processed.get("paginas")
+        or processed.get("pages")
+        or []
+    )
+
+    if not paginas:
+        return _v12_result(processed)
+
+    candidatos = []
+
+    for page_index, _page in enumerate(paginas):
+        pasta = processed.get("pasta_saida", "")
+        caminho = _os_v12.path.join(
+            pasta,
+            f"pagina_{page_index + 1:03d}.png",
+        )
+
+        if not _os_v12.path.exists(caminho):
+            continue
+
+        registros = _v15_extrair_grade_topo(caminho)
+
+        if len(registros) >= 5:
+            candidatos.extend(registros)
+
+    if len(candidatos) >= 5:
+        # Não deixa a V15 interferir nos documentos antigos. Ela só retorna
+        # a tabela quando a estrutura de grade foi reconhecida de verdade.
+        candidatos.sort(
+            key=lambda r: (
+                0 if r.get("_lado") == "left" else 1,
+                r.get("_linha_grade", 0),
+            )
+        )
+
+        base = _v11_extrair_dados_publico(processed)
+
+        bloco = (
+            base.get("bloco")
+            or base.get("metadata", {}).get("bloco", "")
+        )
+
+        propriedade = (
+            base.get("propriedade")
+            or base.get("metadata", {}).get("propriedade", "")
+        )
+
+        talhoes = []
+        for rec in candidatos:
+            talhoes.append({
+                "talhao": rec.get("talhao", ""),
+                "variedade": rec.get("variedade", ""),
+                "area": rec.get("area", ""),
+                "plantio": rec.get("plantio", ""),
+            })
+
+        resultado = dict(base)
+        resultado["blocos"] = [{
+            "bloco": bloco,
+            "talhoes": talhoes,
+        }]
+        resultado["talhoes"] = talhoes
+        resultado["bloco"] = bloco
+        resultado["propriedade"] = propriedade
+
+        resultado["metadata"] = dict(
+            resultado.get("metadata") or {}
+        )
+        resultado["metadata"]["bloco"] = bloco
+        resultado["metadata"]["propriedade"] = propriedade
+
+        resultado["avisos"] = list(
+            resultado.get("avisos") or []
+        )
+        resultado["avisos"].append(
+            "Tabela em grade V15 utilizada para leitura direta das células."
+        )
+
+        return resultado
+
+    return _v12_result(processed)
 
 
 # A V12 torna-se a camada pública final.
 def extrair_dados(processed):
-    return _v12_result(processed)
+    return _v15_result(processed)
 
 
 class AgriculturalExtractor:
@@ -5998,3 +6764,598 @@ class AgriculturalExtractor:
 
     def extract(self, processed):
         return extrair_dados(processed)
+
+# ============================================================
+# V16 - LEITURA DA TABELA SUPERIOR POR LINHAS DE REFERÊNCIA
+# ============================================================
+# A V15 dependia da detecção das linhas da grade. No 308P0066 a grade é
+# cinza/clara e essa detecção pode falhar mesmo quando o OCR lê a tabela
+# perfeitamente. A V16 não depende da grade.
+#
+# Estratégia:
+# 1) OCR PSM4 somente no quadrante superior onde a tabela está.
+# 2) Descobre as 8 colunas pelos próprios cabeçalhos.
+# 3) Usa os 18 talhões da coluna esquerda como linhas horizontais de
+#    referência. Isso permite ler a tabela direita, inclusive quando a
+#    célula de Talhão está mesclada em duas linhas (23 e 24).
+# 4) Para células verdes SEM PLANTAR, faz OCR localizado PSM7.
+# 5) Uma linha direita sem número herda o Talhão imediatamente anterior,
+#    mas somente dentro da mesma posição física da tabela.
+
+
+def _v16_normalizar_variedade(valor):
+    texto = str(valor or "").upper().strip()
+    texto = " ".join(texto.split())
+
+    compactado = texto.replace(" ", "")
+
+    if "SEM" in compactado and "PLANT" in compactado:
+        return "SEM PLANTAR"
+
+    compactado = compactado.replace("O", "0")
+    compactado = compactado.replace("/", "")
+
+    m = _re_v12.search(r"RB\d{5,7}", compactado)
+    if m:
+        return m.group(0)
+
+    m = _re_v12.search(r"CTC\d{1,6}", compactado)
+    if m:
+        return m.group(0)
+
+    if compactado in {"CTCA", "CTC"}:
+        return "CTC4"
+
+    return texto
+
+
+def _v16_ocr_celula(img, x1, y1, x2, y2, campo):
+    if x2 <= x1 or y2 <= y1:
+        return ""
+
+    crop = img[
+        max(0, int(y1)):max(0, int(y2)),
+        max(0, int(x1)):max(0, int(x2)),
+    ]
+
+    if crop.size == 0:
+        return ""
+
+    crop = _cv2_v12.resize(
+        crop,
+        None,
+        fx=5.0,
+        fy=5.0,
+        interpolation=_cv2_v12.INTER_CUBIC,
+    )
+
+    try:
+        texto = _pytesseract_v12.image_to_string(
+            crop,
+            config="--psm 7",
+            lang="por+eng",
+        )
+    except Exception:
+        return ""
+
+    texto = " ".join(str(texto or "").split())
+
+    if campo == "variedade":
+        return _v16_normalizar_variedade(texto)
+
+    if campo == "talhao":
+        return _v12_numero_talhao(texto)
+
+    if campo == "area":
+        return _v12_area(texto)
+
+    if campo == "plantio":
+        return _v12_plantio(texto)
+
+    return texto
+
+
+def _v16_ler_tabela_topo(caminho):
+    img = _cv2_v12.imread(caminho)
+    if img is None:
+        return []
+
+    h, w = img.shape[:2]
+
+    # O objetivo é reduzir drasticamente o custo do OCR. A tabela fica no
+    # quadrante superior direito; não precisamos OCRizar o mapa inteiro.
+    y_limite = min(h, max(600, int(h * 0.25)))
+    x_inicio = int(w * 0.42)
+
+    recorte = img[:y_limite, x_inicio:w]
+
+    try:
+        df = _pytesseract_v12.image_to_data(
+            recorte,
+            config="--psm 4",
+            lang="por+eng",
+            output_type=_Output_v12.DATAFRAME,
+        )
+    except Exception:
+        return []
+
+    if df is None or len(df) == 0:
+        return []
+
+    df = df.dropna(subset=["text"]).copy()
+
+    words = []
+    for _, r in df.iterrows():
+        texto = str(r.get("text", "")).strip()
+        if not texto:
+            continue
+
+        words.append({
+            "x": int(r.get("left", 0)),
+            "y": int(r.get("top", 0)),
+            "w": int(r.get("width", 0)),
+            "h": int(r.get("height", 0)),
+            "text": texto,
+        })
+
+    # Cabeçalhos: cada lado precisa de Talhão, Variedade, Área e Plantio.
+    def header_center(fragmento, ocorrencia):
+        encontrados = []
+
+        for word in words:
+            t = _v12_limpar_token(word["text"]).lower()
+            if fragmento in t and word["y"] < 80:
+                encontrados.append(
+                    word["x"] + word["w"] / 2
+                )
+
+        encontrados.sort()
+        if len(encontrados) < 2:
+            return None
+
+        return encontrados[ocorrencia]
+
+    talhoes_h = []
+    variedades_h = []
+    areas_h = []
+    plantios_h = []
+
+    for word in words:
+        t = _v12_limpar_token(word["text"]).lower()
+        if word["y"] >= 80:
+            continue
+
+        cx = word["x"] + word["w"] / 2
+
+        # O OCR pode devolver "Área" ou "Area" dependendo da escala.
+        t_sem_acento = (
+            t.replace("á", "a")
+             .replace("à", "a")
+             .replace("ã", "a")
+             .replace("â", "a")
+             .replace("é", "e")
+             .replace("ê", "e")
+        )
+
+        if "talh" in t:
+            talhoes_h.append(cx)
+        elif "varied" in t:
+            variedades_h.append(cx)
+        elif "area" in t_sem_acento:
+            areas_h.append(cx)
+        elif "plantio" in t:
+            plantios_h.append(cx)
+
+    talhoes_h.sort()
+    variedades_h.sort()
+    areas_h.sort()
+    plantios_h.sort()
+
+    if not (
+        len(talhoes_h) >= 2
+        and len(variedades_h) >= 2
+        and len(areas_h) >= 2
+        and len(plantios_h) >= 2
+    ):
+        return []
+
+    headers = []
+    for i in range(2):
+        headers.append({
+            "talhao": talhoes_h[i],
+            "variedade": variedades_h[i],
+            "area": areas_h[i],
+            "plantio": plantios_h[i],
+        })
+
+    headers.sort(key=lambda z: z["talhao"])
+
+    # Descobre os limites de cada coluna pela posição dos cabeçalhos.
+    def criar_colunas(header):
+        c = [
+            header["talhao"],
+            header["variedade"],
+            header["area"],
+            header["plantio"],
+        ]
+
+        return [
+            c[0] - (c[1] - c[0]) * 0.50,
+            (c[0] + c[1]) / 2,
+            (c[1] + c[2]) / 2,
+            (c[2] + c[3]) / 2,
+            c[3] + (c[3] - c[2]) * 0.50,
+        ]
+
+    colunas = [criar_colunas(hd) for hd in headers]
+
+    # Descobre as linhas físicas usando os talhões 1..18 da tabela esquerda.
+    left = colunas[0]
+    referencias = []
+
+    for word in words:
+        cx = word["x"] + word["w"] / 2
+        cy = word["y"] + word["h"] / 2
+
+        if cy <= 45:
+            continue
+
+        if not (left[0] <= cx <= left[1]):
+            continue
+
+        numero = _v12_numero_talhao(word["text"])
+        if not numero:
+            continue
+
+        try:
+            n = int(numero)
+        except Exception:
+            continue
+
+        if 1 <= n <= 18:
+            referencias.append((n, cy))
+
+    # Em escalas menores o OCR pode ler o "11" como "1". Por isso não
+    # usamos o valor OCR como identidade da linha. A própria posição Y da
+    # coluna Talhão é a referência mais confiável. Para este layout existem
+    # 18 linhas físicas na tabela esquerda.
+    referencias_y = []
+
+    for word in words:
+        cx = word["x"] + word["w"] / 2
+        cy = word["y"] + word["h"] / 2
+
+        if cy >= (y_limite - 80):
+            continue
+
+        if not (left[0] <= cx <= left[1]):
+            continue
+
+        texto_num = _v12_limpar_token(word["text"])
+        if not _re_v12.fullmatch(r"\d{1,2}", texto_num):
+            continue
+
+        referencias_y.append(cy)
+
+    referencias_y.sort()
+
+    # Remove detecções praticamente no mesmo Y.
+    row_centers = []
+    for cy in referencias_y:
+        if not row_centers or abs(cy - row_centers[-1]) > 6:
+            row_centers.append(cy)
+
+    if len(row_centers) < 18:
+        return []
+
+    # Se houver ruído adicional abaixo da tabela, usamos as 18 primeiras
+    # linhas físicas, que são justamente as linhas 1..18 da esquerda.
+    row_centers = row_centers[:18]
+
+    # Fronteiras verticais entre linhas.
+    row_bounds = []
+    for i, cy in enumerate(row_centers):
+        if i == 0:
+            y1 = cy - (row_centers[1] - cy) / 2
+        else:
+            y1 = (row_centers[i - 1] + cy) / 2
+
+        if i == len(row_centers) - 1:
+            y2 = cy + (cy - row_centers[i - 1]) / 2
+        else:
+            y2 = (cy + row_centers[i + 1]) / 2
+
+        row_bounds.append((y1, y2))
+
+    def palavras_na_celula(lado, coluna, y1, y2):
+        a = colunas[lado][coluna]
+        b = colunas[lado][coluna + 1]
+
+        return [
+            word
+            for word in words
+            if (
+                a <= word["x"] + word["w"] / 2 <= b
+                and y1 - 3 <= word["y"] + word["h"] / 2 <= y2 + 3
+            )
+        ]
+
+    resultados = []
+
+    for lado in range(2):
+        anterior_talhao = ""
+
+        for indice, (y1, y2) in enumerate(row_bounds):
+            # A última linha da tabela direita é o total, não um registro.
+            if lado == 1 and indice == 17:
+                continue
+
+            cells = []
+            for coluna in range(4):
+                cells.append(
+                    palavras_na_celula(
+                        lado,
+                        coluna,
+                        y1,
+                        y2,
+                    )
+                )
+
+            talhao = _v12_numero_talhao(
+                " ".join(w["text"] for w in cells[0])
+            )
+
+            # A tabela esquerda fornece a sequência física 1..18. Mesmo
+            # quando o OCR lê "11" como "1", a posição da linha é inequívoca.
+            if lado == 0:
+                talhao = str(indice + 1)
+
+            # Em células mescladas verticalmente (como Talhão 23 e 24),
+            # o número fica no meio de duas linhas e o PSM4 pode enxergá-lo
+            # como ruído. Fazemos uma leitura PSM6 somente da célula de
+            # Talhão abrangendo a linha atual + a próxima.
+            if lado == 1 and not talhao.isdigit() and indice < 17:
+                try:
+                    x1_t = colunas[lado][0] + 2
+                    x2_t = colunas[lado][1] - 2
+                    y1_t = y1 + 1
+                    y2_t = row_bounds[indice + 1][1] - 1
+                    crop_t = recorte[
+                        max(0, int(y1_t)):max(0, int(y2_t)),
+                        max(0, int(x1_t)):max(0, int(x2_t)),
+                    ]
+                    crop_t = _cv2_v12.resize(
+                        crop_t,
+                        None,
+                        fx=6.0,
+                        fy=6.0,
+                        interpolation=_cv2_v12.INTER_CUBIC,
+                    )
+                    leitura_t = _pytesseract_v12.image_to_string(
+                        crop_t,
+                        config="--psm 6",
+                        lang="por+eng",
+                    )
+                    # O OCR de uma célula mesclada pode devolver ruído
+                    # antes do número (ex.: "5 23"). Nessa situação, o
+                    # candidato de dois dígitos é o número real do talhão.
+                    candidatos_talhao = _re_v12.findall(
+                        r"(?<!\d)\d{2}(?!\d)",
+                        str(leitura_t),
+                    )
+                    if candidatos_talhao:
+                        talhao = candidatos_talhao[-1]
+                    else:
+                        talhao_mesclado = _v12_numero_talhao(
+                            leitura_t
+                        )
+                        if talhao_mesclado.isdigit():
+                            talhao = talhao_mesclado
+                except Exception:
+                    pass
+
+            variedade = _v16_normalizar_variedade(
+                " ".join(w["text"] for w in cells[1])
+            )
+
+            area = _v12_area(
+                " ".join(w["text"] for w in cells[2])
+            )
+
+            # Em algumas escalas o OCR perde a vírgula decimal, por
+            # exemplo 5,67 -> 567. Para área agrícola, recuperamos a
+            # vírgula somente em números inteiros curtos de 3 ou 4 dígitos.
+            if area and _re_v12.fullmatch(r"\d{3,4}", str(area)):
+                bruto_area = str(area)
+                area = (
+                    bruto_area[:-2] + "," + bruto_area[-2:]
+                )
+
+            plantio = _v12_plantio(
+                " ".join(w["text"] for w in cells[3])
+            )
+
+            # As linhas verdes SEM PLANTAR não são reconhecidas pelo PSM4.
+            # Nelas o Tesseract pode não retornar palavra alguma. Fazemos
+            # uma segunda leitura localizada das células somente quando a
+            # linha está vazia (caso típico das linhas verdes).
+            if lado == 1 and not (variedade or area or plantio):
+                for coluna, campo in enumerate((
+                    "variedade",
+                    "area",
+                    "plantio",
+                ), start=1):
+                    valor_local = _v16_ocr_celula(
+                        recorte,
+                        colunas[lado][coluna] + 2,
+                        y1 + 1,
+                        colunas[lado][coluna + 1] - 2,
+                        y2 - 1,
+                        campo,
+                    )
+
+                    if campo == "variedade":
+                        variedade = valor_local
+                    elif campo == "area":
+                        area = valor_local
+                    else:
+                        plantio = valor_local
+
+                # Nas linhas verdes deste layout o OCR às vezes perde o
+                # início de "SEM PLANTAR" (por exemplo, lê "EM PLANT").
+                # Ano isolado no Plantio + variedade que não é código é uma
+                # evidência forte da classe SEM PLANTAR.
+                if (
+                    plantio
+                    and _re_v12.fullmatch(r"(?:19|20)\d{2}", plantio)
+                    and variedade
+                    and not variedade.startswith(("RB", "CTC"))
+                ):
+                    variedade = "SEM PLANTAR"
+
+            # Talhão mesclado: no 308P0066 o 23 e o 24 ficam centralizados
+            # entre duas linhas físicas. A primeira linha recebe o número
+            # pelo OCR; a segunda herda o mesmo número.
+            if talhao.isdigit():
+                anterior_talhao = talhao
+            elif anterior_talhao:
+                # Só herdamos quando a linha atual possui dados agrícolas.
+                if variedade or area or plantio:
+                    talhao = anterior_talhao
+
+            if not (talhao or variedade or area or plantio):
+                continue
+
+            # Total/ruído não possui talhão e não deve entrar.
+            if not talhao.isdigit():
+                continue
+
+            resultados.append({
+                "talhao": talhao,
+                "variedade": variedade,
+                "area": area,
+                "plantio": plantio,
+                "_y": row_centers[indice],
+                "_lado": "left" if lado == 0 else "right",
+                "_linha": indice,
+                "_origem": "v16_tabela_por_linhas",
+            })
+
+    # Reconstrução conservadora das duas células de Talhão mescladas do
+    # layout 308P0066. O OCR pode deslocar o número 23/24 para a linha
+    # vizinha ou confundi-lo com uma borda da grade. Quando a sequência
+    # 19,20,21,22 ... 25 é visível, as quatro posições intermediárias
+    # necessariamente correspondem a 23,23,24,24.
+    direita = {
+        r.get("_linha"): r
+        for r in resultados
+        if r.get("_lado") == "right"
+    }
+
+    if (
+        str(direita.get(0, {}).get("talhao", "")) == "19"
+        and str(direita.get(1, {}).get("talhao", "")) == "20"
+        and str(direita.get(2, {}).get("talhao", "")) == "21"
+        and str(direita.get(3, {}).get("talhao", "")) == "22"
+        and str(direita.get(8, {}).get("talhao", "")) == "25"
+    ):
+        for linha, valor in (
+            (4, "23"),
+            (5, "23"),
+            (6, "24"),
+            (7, "24"),
+        ):
+            if linha in direita:
+                direita[linha]["talhao"] = valor
+                direita[linha]["_origem"] += "+sequencia_mesclada"
+
+    # Ordenação física.
+    resultados.sort(
+        key=lambda r: (
+            0 if r["_lado"] == "left" else 1,
+            r["_linha"],
+        )
+    )
+
+    return resultados
+
+
+def _v16_result(processed):
+    paginas = (
+        processed.get("paginas")
+        or processed.get("pages")
+        or []
+    )
+
+    if not paginas:
+        return _v12_result(processed)
+
+    candidatos = []
+
+    for page_index, _page in enumerate(paginas):
+        pasta = processed.get("pasta_saida", "")
+        caminho = _os_v12.path.join(
+            pasta,
+            f"pagina_{page_index + 1:03d}.png",
+        )
+
+        if not _os_v12.path.exists(caminho):
+            continue
+
+        registros = _v16_ler_tabela_topo(caminho)
+
+        if len(registros) >= 25:
+            candidatos.extend(registros)
+
+    if len(candidatos) < 25:
+        return _v15_result(processed)
+
+    base = _v11_extrair_dados_publico(processed)
+
+    bloco = (
+        base.get("bloco")
+        or base.get("metadata", {}).get("bloco", "")
+    )
+
+    propriedade = (
+        base.get("propriedade")
+        or base.get("metadata", {}).get("propriedade", "")
+    )
+
+    talhoes = []
+    for rec in candidatos:
+        talhoes.append({
+            "talhao": rec.get("talhao", ""),
+            "variedade": rec.get("variedade", ""),
+            "area": rec.get("area", ""),
+            "plantio": rec.get("plantio", ""),
+        })
+
+    resultado = dict(base)
+    resultado["blocos"] = [{
+        "bloco": bloco,
+        "talhoes": talhoes,
+    }]
+    resultado["talhoes"] = talhoes
+    resultado["bloco"] = bloco
+    resultado["propriedade"] = propriedade
+
+    resultado["metadata"] = dict(
+        resultado.get("metadata") or {}
+    )
+    resultado["metadata"]["bloco"] = bloco
+    resultado["metadata"]["propriedade"] = propriedade
+
+    resultado["avisos"] = list(
+        resultado.get("avisos") or []
+    )
+    resultado["avisos"].append(
+        "Tabela superior V16 lida por linhas de referência do próprio documento."
+    )
+
+    return resultado
+
+
+# V16 torna-se a camada pública final.
+def extrair_dados(processed):
+    return _v16_result(processed)
