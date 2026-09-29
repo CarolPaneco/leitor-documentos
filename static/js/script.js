@@ -1,48 +1,69 @@
-// ============================================================
-// IA DOCUMENTOS AGRÍCOLAS
-// SCRIPT PRINCIPAL
-// ============================================================
-
-
-// ============================================================
-// ELEMENTOS DA PÁGINA
-// ============================================================
-
 const arquivoInput =
-    document.getElementById("arquivo");
+    document.getElementById(
+        "arquivo"
+    );
+
 
 const dropzone =
-    document.getElementById("dropzone");
+    document.getElementById(
+        "dropzone"
+    );
+
 
 const btnProcessar =
-    document.getElementById("btnProcessar");
+    document.getElementById(
+        "btnProcessar"
+    );
+
 
 const arquivoSelecionado =
-    document.getElementById("arquivoSelecionado");
+    document.getElementById(
+        "arquivoSelecionado"
+    );
+
 
 const loading =
-    document.getElementById("loading");
+    document.getElementById(
+        "loading"
+    );
+
 
 const resultado =
-    document.getElementById("resultado");
+    document.getElementById(
+        "resultado"
+    );
 
 
-// ============================================================
-// ESTADO
-// ============================================================
-
-let arquivoAtual = null;
-
-let documentoAtual = null;
-
-let documentoIdAtual = null;
-
-let totalCorrecoes = 0;
+const mensagem =
+    document.getElementById(
+        "mensagem"
+    );
 
 
-// ============================================================
-// SELEÇÃO DO ARQUIVO
-// ============================================================
+const progressoTexto =
+    document.getElementById(
+        "progressoTexto"
+    );
+
+
+const progressoDetalhes =
+    document.getElementById(
+        "progressoDetalhes"
+    );
+
+
+const barraProgresso =
+    document.getElementById(
+        "barraProgresso"
+    );
+
+
+let arquivosAtuais = [];
+
+
+// ==========================================================
+// SELEÇÃO DE ARQUIVOS
+// ==========================================================
 
 dropzone.addEventListener(
     "click",
@@ -54,38 +75,36 @@ dropzone.addEventListener(
 );
 
 
-// ============================================================
-// INPUT DE ARQUIVO
-// ============================================================
+// ==========================================================
+// INPUT
+// ==========================================================
 
 arquivoInput.addEventListener(
     "change",
     () => {
 
-        if (
-            arquivoInput.files.length > 0
-        ) {
+        arquivosAtuais =
+            Array.from(
+                arquivoInput.files
+            );
 
-            arquivoAtual =
-                arquivoInput.files[0];
 
-            mostrarArquivo();
-
-        }
+        mostrarArquivos();
 
     }
 );
 
 
-// ============================================================
-// DRAG
-// ============================================================
+// ==========================================================
+// DRAG OVER
+// ==========================================================
 
 dropzone.addEventListener(
     "dragover",
     event => {
 
         event.preventDefault();
+
 
         dropzone.classList.add(
             "dragging"
@@ -95,9 +114,9 @@ dropzone.addEventListener(
 );
 
 
-// ============================================================
+// ==========================================================
 // DRAG LEAVE
-// ============================================================
+// ==========================================================
 
 dropzone.addEventListener(
     "dragleave",
@@ -111,9 +130,9 @@ dropzone.addEventListener(
 );
 
 
-// ============================================================
+// ==========================================================
 // DROP
-// ============================================================
+// ==========================================================
 
 dropzone.addEventListener(
     "drop",
@@ -121,33 +140,33 @@ dropzone.addEventListener(
 
         event.preventDefault();
 
+
         dropzone.classList.remove(
             "dragging"
         );
 
 
-        if (
-            event.dataTransfer.files.length > 0
-        ) {
+        arquivosAtuais =
+            Array.from(
+                event.dataTransfer.files
+            );
 
-            arquivoAtual =
-                event.dataTransfer.files[0];
 
-            mostrarArquivo();
-
-        }
+        mostrarArquivos();
 
     }
 );
 
 
-// ============================================================
-// MOSTRAR ARQUIVO
-// ============================================================
+// ==========================================================
+// MOSTRAR ARQUIVOS
+// ==========================================================
 
-function mostrarArquivo() {
+function mostrarArquivos() {
 
-    if (!arquivoAtual) {
+    if (
+        !arquivosAtuais.length
+    ) {
 
         arquivoSelecionado.innerHTML =
             "";
@@ -157,24 +176,92 @@ function mostrarArquivo() {
     }
 
 
-    arquivoSelecionado.innerHTML = `
+    const lista =
+        arquivosAtuais
+            .map(
+                (arquivo, indice) => {
 
-        <strong>
-            Arquivo selecionado:
-        </strong>
+                    const tamanho =
+                        formatarTamanho(
+                            arquivo.size
+                        );
 
-        ${escapeHtml(
-            arquivoAtual.name
-        )}
 
-    `;
+                    return `
+                        <div
+                            class="arquivo-item"
+                        >
+
+                            <span
+                                class="arquivo-icone"
+                            >
+                                📄
+                            </span>
+
+
+                            <span
+                                class="arquivo-numero"
+                            >
+                                ${indice + 1}.
+                            </span>
+
+
+                            <span
+                                class="arquivo-nome"
+                            >
+                                ${escapeHtml(
+                                    arquivo.name
+                                )}
+                            </span>
+
+
+                            <span
+                                class="arquivo-tamanho"
+                            >
+                                ${tamanho}
+                            </span>
+
+                        </div>
+                    `;
+
+                }
+            )
+            .join("");
+
+
+    arquivoSelecionado.innerHTML =
+        `
+        <div
+            class="arquivos-resumo"
+        >
+
+            <strong>
+
+                ${arquivosAtuais.length}
+
+                arquivo(s)
+                selecionado(s)
+
+            </strong>
+
+
+            <div
+                class="lista-arquivos"
+            >
+
+                ${lista}
+
+            </div>
+
+        </div>
+        `;
 
 }
 
 
-// ============================================================
+// ==========================================================
 // BOTÃO PROCESSAR
-// ============================================================
+// ==========================================================
 
 btnProcessar.addEventListener(
     "click",
@@ -182,965 +269,426 @@ btnProcessar.addEventListener(
 );
 
 
-// ============================================================
-// PROCESSAR DOCUMENTO
-// ============================================================
+// ==========================================================
+// PROCESSAMENTO PRINCIPAL
+// ==========================================================
 
 async function processar() {
 
-    if (!arquivoAtual) {
+    if (
+        !arquivosAtuais.length
+    ) {
 
         alert(
-            "Selecione um documento primeiro."
+            "Selecione pelo menos um documento."
         );
 
         return;
 
     }
 
+
+    // ------------------------------------------------------
+    // RESET DA TELA
+    // ------------------------------------------------------
 
     resultado.classList.add(
         "hidden"
     );
 
+
+    mensagem.innerHTML =
+        "";
+
+
     loading.classList.remove(
         "hidden"
     );
 
-    btnProcessar.disabled = true;
+
+    btnProcessar.disabled =
+        true;
 
 
-    const formData =
-        new FormData();
+    barraProgresso.style.width =
+        "0%";
 
 
-    formData.append(
-        "arquivo",
-        arquivoAtual
-    );
+    progressoTexto.textContent =
+        "Preparando arquivos...";
 
+
+    progressoDetalhes.textContent =
+        `0 de ${arquivosAtuais.length} arquivos`;
+
+
+    // ------------------------------------------------------
+    // RESULTADOS
+    // ------------------------------------------------------
+
+    const todasLinhas = [];
+
+    const arquivosProcessados = [];
+
+    const erros = [];
+
+
+    // ------------------------------------------------------
+    // PROCESSA UM ARQUIVO POR VEZ
+    // ------------------------------------------------------
 
     try {
 
-        const resposta =
-            await fetch(
-                "/api/processar",
-                {
-                    method: "POST",
-                    body: formData
-                }
+        for (
+            let i = 0;
+            i < arquivosAtuais.length;
+            i++
+        ) {
+
+            const arquivo =
+                arquivosAtuais[i];
+
+
+            const numeroAtual =
+                i + 1;
+
+
+            progressoTexto.textContent =
+                `Processando: ${arquivo.name}`;
+
+
+            progressoDetalhes.textContent =
+                `${numeroAtual} de ${arquivosAtuais.length} arquivos`;
+
+
+            // ----------------------------------------------
+            // PROGRESSO
+            // ----------------------------------------------
+
+            const progresso =
+                (
+                    i /
+                    arquivosAtuais.length
+                ) * 100;
+
+
+            barraProgresso.style.width =
+                `${progresso}%`;
+
+
+            // ----------------------------------------------
+            // ENVIA SOMENTE UM ARQUIVO
+            // ----------------------------------------------
+
+            const formData =
+                new FormData();
+
+
+            formData.append(
+                "arquivo",
+                arquivo
             );
 
 
-        const dados =
-            await resposta.json();
+            try {
 
+                const resposta =
+                    await fetch(
+                        "/api/processar-arquivo",
+                        {
+                            method:
+                                "POST",
+
+                            body:
+                                formData
+                        }
+                    );
+
+
+                // ------------------------------------------
+                // VERIFICA RESPOSTA
+                // ------------------------------------------
+
+                if (
+                    !resposta.ok
+                ) {
+
+                    let erro =
+                        "Erro ao processar o arquivo.";
+
+
+                    try {
+
+                        const dadosErro =
+                            await resposta.json();
+
+
+                        erro =
+                            dadosErro.erro ||
+                            erro;
+
+                    } catch (_) {
+
+                        // Mantém erro padrão.
+
+                    }
+
+
+                    throw new Error(
+                        erro
+                    );
+
+                }
+
+
+                const dados =
+                    await resposta.json();
+
+
+                if (
+                    !dados.sucesso
+                ) {
+
+                    throw new Error(
+                        dados.erro ||
+                        "Não foi possível processar o arquivo."
+                    );
+
+                }
+
+
+                // ------------------------------------------
+                // GUARDA AS LINHAS
+                // ------------------------------------------
+
+                if (
+                    Array.isArray(
+                        dados.linhas
+                    )
+                ) {
+
+                    todasLinhas.push(
+                        ...dados.linhas
+                    );
+
+                }
+
+
+                arquivosProcessados.push(
+                    arquivo.name
+                );
+
+
+                // ------------------------------------------
+                // ATUALIZA PROGRESSO
+                // ------------------------------------------
+
+                const progressoFinal =
+                    (
+                        numeroAtual /
+                        arquivosAtuais.length
+                    ) * 100;
+
+
+                barraProgresso.style.width =
+                    `${progressoFinal}%`;
+
+
+            } catch (erroArquivo) {
+
+                console.error(
+                    `Erro no arquivo ${arquivo.name}:`,
+                    erroArquivo
+                );
+
+
+                erros.push({
+
+                    arquivo:
+                        arquivo.name,
+
+                    erro:
+                        erroArquivo.message
+
+                });
+
+            }
+
+        }
+
+
+        // --------------------------------------------------
+        // VERIFICA SE ALGUM DADO FOI EXTRAÍDO
+        // --------------------------------------------------
 
         if (
-            !resposta.ok ||
-            !dados.sucesso
+            !todasLinhas.length
         ) {
 
             throw new Error(
-
-                dados.erro ||
-                "Erro ao processar documento."
-
+                "Nenhum dado agrícola foi extraído dos arquivos."
             );
 
         }
 
 
-        documentoAtual =
-            dados.resultado;
+        // --------------------------------------------------
+        // TODOS OS PDFs TERMINARAM
+        // --------------------------------------------------
+
+        progressoTexto.textContent =
+            "Gerando Excel...";
 
 
-        documentoIdAtual =
-            dados.documento_id;
+        progressoDetalhes.textContent =
+            `${arquivosProcessados.length} de ${arquivosAtuais.length} arquivos processados`;
 
 
-        totalCorrecoes = 0;
+        barraProgresso.style.width =
+            "100%";
 
 
-        renderizarResultado(
-            dados
+        // --------------------------------------------------
+        // ENVIA SOMENTE OS DADOS PARA GERAR EXCEL
+        // --------------------------------------------------
+
+        const respostaExcel =
+            await fetch(
+                "/api/gerar-excel",
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+                            linhas:
+                                todasLinhas
+                        })
+
+                }
+            );
+
+
+        if (
+            !respostaExcel.ok
+        ) {
+
+            let erro =
+                "Erro ao gerar o Excel.";
+
+
+            try {
+
+                const dadosErro =
+                    await respostaExcel.json();
+
+
+                erro =
+                    dadosErro.erro ||
+                    erro;
+
+            } catch (_) {
+
+                // Mantém mensagem padrão.
+
+            }
+
+
+            throw new Error(
+                erro
+            );
+
+        }
+
+
+        // --------------------------------------------------
+        // RECEBE EXCEL
+        // --------------------------------------------------
+
+        const blob =
+            await respostaExcel.blob();
+
+
+        const url =
+            window.URL.createObjectURL(
+                blob
+            );
+
+
+        const nomeArquivo =
+            obterNomeArquivo(
+                respostaExcel
+            );
+
+
+        // --------------------------------------------------
+        // DOWNLOAD AUTOMÁTICO
+        // --------------------------------------------------
+
+        const link =
+            document.createElement(
+                "a"
+            );
+
+
+        link.href =
+            url;
+
+
+        link.download =
+            nomeArquivo;
+
+
+        document.body.appendChild(
+            link
         );
 
 
-        carregarEstatisticas();
+        link.click();
 
 
-    } catch (erro) {
+        link.remove();
 
-        console.error(
-            erro
+
+        // --------------------------------------------------
+        // RESULTADO
+        // --------------------------------------------------
+
+        mostrarSucesso(
+
+            arquivosProcessados.length,
+
+            todasLinhas.length,
+
+            erros.length
+
         );
 
 
-        alert(
-            "Erro: " +
-            erro.message
-        );
-
-
-    } finally {
-
-        loading.classList.add(
+        resultado.classList.remove(
             "hidden"
         );
 
-        btnProcessar.disabled = false;
 
-    }
-
-}
-
-
-// ============================================================
-// RENDERIZAR RESULTADO
-// ============================================================
-
-function renderizarResultado(
-    dados
-) {
-
-    const documento =
-        dados.resultado || {};
-
-
-    documentoAtual =
-        documento;
-
-
-    resultado.classList.remove(
-        "hidden"
-    );
-
-
-    document.getElementById(
-        "nomeDocumento"
-    ).textContent =
-        dados.arquivo || "Documento";
-
-
-    const btnDownload =
-        document.getElementById(
-            "btnDownload"
-        );
-
-
-    if (
-        btnDownload &&
-        dados.download
-    ) {
-
-        btnDownload.href =
-            dados.download;
-
-    }
-
-
-    const blocos =
-        documento.blocos || [];
-
-
-    let totalTalhoes = 0;
-
-
-    blocos.forEach(
-        bloco => {
-
-            totalTalhoes += (
-                bloco.talhoes || []
-            ).length;
-
-        }
-    );
-
-
-    document.getElementById(
-        "totalBlocos"
-    ).textContent =
-        blocos.length;
-
-
-    document.getElementById(
-        "totalTalhoes"
-    ).textContent =
-        totalTalhoes;
-
-
-    document.getElementById(
-        "totalCorrecoes"
-    ).textContent =
-        totalCorrecoes;
-
-
-    renderizarAlertas(
-        documento.avisos || []
-    );
-
-
-    renderizarMetadata(
-        documento.metadata || {}
-    );
-
-
-    renderizarBlocos(
-        blocos
-    );
-
-
-    resultado.scrollIntoView({
-        behavior: "smooth"
-    });
-
-}
-
-
-// ============================================================
-// ALERTAS
-// ============================================================
-
-function renderizarAlertas(
-    avisos
-) {
-
-    const container =
-        document.getElementById(
-            "alertas"
-        );
-
-
-    if (!container) {
-
-        return;
-
-    }
-
-
-    if (
-        !avisos ||
-        avisos.length === 0
-    ) {
-
-        container.innerHTML = `
-
-            <div class="alerta ok">
-
-                ✓ Nenhuma inconsistência
-                básica encontrada.
-
-            </div>
-
-        `;
-
-        return;
-
-    }
-
-
-    container.innerHTML =
-        avisos.map(
-            aviso => `
-
-                <div class="alerta">
-
-                    ⚠
-                    ${escapeHtml(
-                        String(aviso)
-                    )}
-
-                </div>
-
-            `
-        ).join("");
-
-}
-
-
-// ============================================================
-// METADADOS
-// SOMENTE OS CAMPOS IMPORTANTES
-// ============================================================
-
-function renderizarMetadata(
-    metadata
-) {
-
-    const container =
-        document.getElementById(
-            "metadataGrid"
-        );
-
-
-    if (!container) {
-
-        return;
-
-    }
-
-
-    const bloco =
-        metadata.bloco || "";
-
-
-    const propriedade =
-        metadata.propriedade || "";
-
-
-    container.innerHTML = `
-
-        ${criarCampoMetadata(
-            "Bloco",
-            bloco
-        )}
-
-        ${criarCampoMetadata(
-            "Propriedade",
-            propriedade
-        )}
-
-    `;
-
-}
-
-
-// ============================================================
-// CAMPO DE METADATA
-// ============================================================
-
-function criarCampoMetadata(
-    nome,
-    valor
-) {
-
-    const vazio =
-        !valor ||
-        String(valor).trim() === "";
-
-
-    return `
-
-        <div class="meta-item">
-
-            <label>
-                ${nome}
-            </label>
-
-            <strong
-                ${vazio
-                    ? 'class="campo-vazio"'
-                    : ''
-                }
-            >
-
-                ${
-                    vazio
-                    ? "—"
-                    : escapeHtml(
-                        String(valor)
-                    )
-                }
-
-            </strong>
-
-        </div>
-
-    `;
-
-}
-
-
-// ============================================================
-// RENDERIZAR BLOCOS
-// ============================================================
-
-function renderizarBlocos(
-    blocos
-) {
-
-    const container =
-        document.getElementById(
-            "tabelasBlocos"
-        );
-
-
-    if (!container) {
-
-        return;
-
-    }
-
-
-    if (
-        !blocos ||
-        blocos.length === 0
-    ) {
-
-        container.innerHTML = `
-
-            <div class="alerta">
-
-                Nenhuma tabela foi
-                identificada.
-
-            </div>
-
-        `;
-
-        return;
-
-    }
-
-
-    container.innerHTML =
-        blocos.map(
-            (bloco, indiceBloco) => {
-
-                return renderizarBloco(
-                    bloco,
-                    indiceBloco
-                );
-
-            }
-        ).join("");
-
-}
-
-
-// ============================================================
-// RENDERIZAR UM BLOCO
-// ============================================================
-
-function renderizarBloco(
-    bloco,
-    indiceBloco
-) {
-
-    const talhoes =
-        bloco.talhoes || [];
-
-
-    const codigo =
-        bloco.bloco ||
-        bloco.codigo ||
-        "";
-
-
-    return `
-
-        <div
-            class="tabela-bloco"
-            data-bloco-index="${indiceBloco}"
-        >
-
-            <div class="tabela-titulo">
-
-                Bloco:
-                ${
-                    codigo
-                    ? escapeHtml(
-                        String(codigo)
-                    )
-                    : "Não identificado"
-                }
-
-            </div>
-
-
-            <table>
-
-                <thead>
-
-                    <tr>
-
-                        <th>
-                            Talhão
-                        </th>
-
-                        <th>
-                            Variedade
-                        </th>
-
-                        <th>
-                            Área
-                        </th>
-
-                        <th>
-                            Plantio
-                        </th>
-
-                    </tr>
-
-                </thead>
-
-
-                <tbody>
-
-                    ${
-                        talhoes.map(
-                            (
-                                talhao,
-                                indiceTalhao
-                            ) => {
-
-                                return renderizarTalhao(
-                                    talhao,
-                                    indiceBloco,
-                                    indiceTalhao
-                                );
-
-                            }
-                        ).join("")
-                    }
-
-                </tbody>
-
-            </table>
-
-
-            <div
-                class="acoes-bloco"
-            >
-
-                <button
-                    type="button"
-                    class="btn-confirmar-bloco"
-                    onclick="confirmarBloco(
-                        ${indiceBloco}
-                    )"
-                >
-
-                    ✓ Confirmar bloco
-
-                </button>
-
-            </div>
-
-        </div>
-
-    `;
-
-}
-
-
-// ============================================================
-// RENDERIZAR TALHÃO
-// ============================================================
-
-function renderizarTalhao(
-    talhao,
-    indiceBloco,
-    indiceTalhao
-) {
-
-    const numero =
-        talhao.talhao || "";
-
-
-    const variedade =
-        talhao.variedade || "";
-
-
-    const area =
-        talhao.area || "";
-
-
-    const plantio =
-        talhao.plantio || "";
-
-
-    return `
-
-        <tr
-            data-bloco="${indiceBloco}"
-            data-talhao="${indiceTalhao}"
-        >
-
-            <td>
-
-                <input
-                    type="text"
-                    class="campo-tabela"
-                    value="${escapeAttribute(
-                        numero
-                    )}"
-                    data-campo="talhao"
-                    onchange="campoAlterado(
-                        ${indiceBloco},
-                        ${indiceTalhao},
-                        'talhao',
-                        this
-                    )"
-                >
-
-            </td>
-
-
-            <td>
-
-                <input
-                    type="text"
-                    class="campo-tabela"
-                    value="${escapeAttribute(
-                        variedade
-                    )}"
-                    data-campo="variedade"
-                    onchange="campoAlterado(
-                        ${indiceBloco},
-                        ${indiceTalhao},
-                        'variedade',
-                        this
-                    )"
-                >
-
-            </td>
-
-
-            <td>
-
-                <input
-                    type="text"
-                    class="campo-tabela"
-                    value="${escapeAttribute(
-                        area
-                    )}"
-                    data-campo="area"
-                    onchange="campoAlterado(
-                        ${indiceBloco},
-                        ${indiceTalhao},
-                        'area',
-                        this
-                    )"
-                >
-
-            </td>
-
-
-            <td>
-
-                <input
-                    type="text"
-                    class="campo-tabela"
-                    value="${escapeAttribute(
-                        plantio
-                    )}"
-                    data-campo="plantio"
-                    onchange="campoAlterado(
-                        ${indiceBloco},
-                        ${indiceTalhao},
-                        'plantio',
-                        this
-                    )"
-                >
-
-            </td>
-
-        </tr>
-
-    `;
-
-}
-
-
-// ============================================================
-// CAMPO ALTERADO
-// ============================================================
-
-async function campoAlterado(
-    indiceBloco,
-    indiceTalhao,
-    campo,
-    elemento
-) {
-
-    if (
-        !documentoAtual ||
-        !documentoAtual.blocos
-    ) {
-
-        return;
-
-    }
-
-
-    const bloco =
-        documentoAtual.blocos[
-            indiceBloco
-        ];
-
-
-    if (!bloco) {
-
-        return;
-
-    }
-
-
-    const talhao =
-        (bloco.talhoes || [])[
-            indiceTalhao
-        ];
-
-
-    if (!talhao) {
-
-        return;
-
-    }
-
-
-    const valorAnterior =
-        talhao[campo] || "";
-
-
-    const valorNovo =
-        elemento.value.trim();
-
-
-    if (
-        valorAnterior ===
-        valorNovo
-    ) {
-
-        return;
-
-    }
-
-
-    // Atualiza o documento na memória
-
-    talhao[campo] =
-        valorNovo;
-
-
-    elemento.classList.add(
-        "campo-corrigido"
-    );
-
-
-    totalCorrecoes++;
-
-
-    atualizarContadorCorrecoes();
-
-
-    try {
-
-        const resposta =
-            await fetch(
-                "/api/corrigir",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-
-                        documento_id:
-                            documentoIdAtual,
-
-                        campo:
-                            campo,
-
-                        valor_original:
-                            valorAnterior,
-
-                        valor_corrigido:
-                            valorNovo,
-
-                        contexto:
-                            JSON.stringify({
-
-                                bloco:
-                                    bloco.bloco ||
-                                    bloco.codigo ||
-                                    "",
-
-                                talhao:
-                                    valorNovo ||
-                                    talhao.talhao ||
-                                    "",
-
-                                indiceBloco:
-                                    indiceBloco,
-
-                                indiceTalhao:
-                                    indiceTalhao
-
-                            })
-
-                    })
-
-                }
+        const nomeDocumento =
+            document.getElementById(
+                "nomeDocumento"
             );
 
 
-        const dados =
-            await resposta.json();
+        nomeDocumento.textContent =
+            `${arquivosProcessados.length} arquivo(s) processado(s) — ${todasLinhas.length} linha(s) extraída(s).`;
 
 
-        if (
-            !resposta.ok ||
-            !dados.sucesso
-        ) {
-
-            throw new Error(
-                dados.erro ||
-                "Não foi possível salvar a correção."
-            );
-
-        }
-
-
-    } catch (erro) {
-
-        console.error(
-            erro
-        );
-
-
-        // Mantém a alteração visual,
-        // mas informa que não foi salva.
-
-        elemento.classList.add(
-            "campo-erro"
-        );
-
-
-        alert(
-            "A alteração foi feita na tela, "
-            + "mas não foi possível registrar "
-            + "a correção no servidor."
-        );
-
-    }
-
-}
-
-
-// ============================================================
-// ATUALIZAR CONTADOR
-// ============================================================
-
-function atualizarContadorCorrecoes() {
-
-    const elemento =
-        document.getElementById(
-            "totalCorrecoes"
-        );
-
-
-    if (elemento) {
-
-        elemento.textContent =
-            totalCorrecoes;
-
-    }
-
-}
-
-
-// ============================================================
-// CONFIRMAR BLOCO
-// ============================================================
-
-async function confirmarBloco(
-    indiceBloco
-) {
-
-    if (
-        !documentoAtual ||
-        !documentoAtual.blocos
-    ) {
-
-        return;
-
-    }
-
-
-    const bloco =
-        documentoAtual.blocos[
-            indiceBloco
-        ];
-
-
-    if (!bloco) {
-
-        return;
-
-    }
-
-
-    try {
-
-        const resposta =
-            await fetch(
-                "/api/confirmar",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-
-                        documento_id:
-                            documentoIdAtual,
-
-                        documento:
-                            documentoAtual
-
-                    })
-
-                }
-            );
-
-
-        const dados =
-            await resposta.json();
-
-
-        if (
-            !resposta.ok ||
-            !dados.sucesso
-        ) {
-
-            throw new Error(
-                dados.erro ||
-                "Não foi possível confirmar."
-            );
-
-        }
-
-
-        alert(
-            "Bloco confirmado com sucesso."
-        );
-
-
-        const btn =
-            document.querySelector(
-                `[data-bloco-index="${indiceBloco}"] .btn-confirmar-bloco`
-            );
-
-
-        if (btn) {
-
-            btn.textContent =
-                "✓ Bloco confirmado";
-
-            btn.disabled =
-                true;
-
-        }
-
+        // --------------------------------------------------
+        // BOTÃO DOWNLOAD NOVAMENTE
+        // --------------------------------------------------
 
         const btnDownload =
             document.getElementById(
@@ -1148,16 +696,31 @@ async function confirmarBloco(
             );
 
 
+        btnDownload.href =
+            url;
+
+
+        btnDownload.download =
+            nomeArquivo;
+
+
+        // --------------------------------------------------
+        // MENSAGEM DE ERROS PARCIAIS
+        // --------------------------------------------------
+
         if (
-            btnDownload &&
-            dados.download
+            erros.length
         ) {
 
-            btnDownload.href =
-                dados.download;
+            mostrarErros(
+                erros
+            );
 
         }
 
+
+        // Não revogar imediatamente.
+        // O botão "Baixar Excel" ainda utiliza a URL.
 
     } catch (erro) {
 
@@ -1166,90 +729,283 @@ async function confirmarBloco(
         );
 
 
-        alert(
-            "Erro ao confirmar: " +
-            erro.message
+        mensagem.innerHTML =
+            `
+            <div
+                class="alerta erro"
+            >
+
+                <span
+                    class="alerta-icone"
+                >
+                    ⚠
+                </span>
+
+
+                <div>
+
+                    <strong>
+                        Erro no processamento
+                    </strong>
+
+
+                    <p>
+                        ${escapeHtml(
+                            erro.message
+                        )}
+                    </p>
+
+                </div>
+
+            </div>
+            `;
+
+
+        resultado.classList.remove(
+            "hidden"
         );
+
+    } finally {
+
+        loading.classList.add(
+            "hidden"
+        );
+
+
+        btnProcessar.disabled =
+            false;
 
     }
 
 }
 
 
-// ============================================================
-// ESTATÍSTICAS
-// ============================================================
+// ==========================================================
+// NOME DO EXCEL
+// ==========================================================
 
-async function carregarEstatisticas() {
+function obterNomeArquivo(
+    resposta
+) {
 
-    try {
-
-        const resposta =
-            await fetch(
-                "/api/estatisticas"
-            );
-
-
-        const dados =
-            await resposta.json();
-
-
-        const statDocs =
-            document.getElementById(
-                "statDocs"
-            );
-
-
-        const statExtracoes =
-            document.getElementById(
-                "statExtracoes"
-            );
-
-
-        const statCorrecoes =
-            document.getElementById(
-                "statCorrecoes"
-            );
-
-
-        if (statDocs) {
-
-            statDocs.textContent =
-                dados.documentos ?? 0;
-
-        }
-
-
-        if (statExtracoes) {
-
-            statExtracoes.textContent =
-                dados.extracoes ?? 0;
-
-        }
-
-
-        if (statCorrecoes) {
-
-            statCorrecoes.textContent =
-                dados.correcoes ?? 0;
-
-        }
-
-    } catch (erro) {
-
-        console.error(
-            "Erro ao carregar estatísticas:",
-            erro
+    const contentDisposition =
+        resposta.headers.get(
+            "Content-Disposition"
         );
 
+
+    if (
+        contentDisposition
+    ) {
+
+        const encontrado =
+            contentDisposition.match(
+                /filename="?([^"]+)"?/i
+            );
+
+
+        if (
+            encontrado
+        ) {
+
+            return encontrado[1];
+
+        }
+
     }
+
+
+    return "dados_agricolas.xlsx";
 
 }
 
 
-// ============================================================
-// ESCAPAR HTML
-// ============================================================
+// ==========================================================
+// SUCESSO
+// ==========================================================
+
+function mostrarSucesso(
+    quantidadeArquivos,
+    quantidadeLinhas,
+    quantidadeErros
+) {
+
+    let texto =
+        `
+        ${quantidadeArquivos}
+        arquivo(s) processado(s)
+        e
+        ${quantidadeLinhas}
+        linha(s) extraída(s).
+        `;
+
+
+    if (
+        quantidadeErros > 0
+    ) {
+
+        texto +=
+            `
+            ${quantidadeErros}
+            arquivo(s) apresentaram erro.
+            `;
+
+    }
+
+
+    mensagem.innerHTML =
+        `
+        <div
+            class="
+                alerta
+                ok
+            "
+        >
+
+            <span
+                class="alerta-icone"
+            >
+                ✓
+            </span>
+
+
+            <div>
+
+                <strong>
+                    Excel gerado com sucesso!
+                </strong>
+
+
+                <p>
+                    ${texto}
+                </p>
+
+            </div>
+
+        </div>
+        `;
+
+}
+
+
+// ==========================================================
+// ERROS PARCIAIS
+// ==========================================================
+
+function mostrarErros(
+    erros
+) {
+
+    const lista =
+        erros
+            .map(
+                item => {
+
+                    return `
+                        <div
+                            class="alerta erro"
+                        >
+
+                            <span>
+                                ⚠
+                            </span>
+
+
+                            <div>
+
+                                <strong>
+                                    ${escapeHtml(
+                                        item.arquivo
+                                    )}
+                                </strong>
+
+
+                                <p>
+                                    ${escapeHtml(
+                                        item.erro
+                                    )}
+                                </p>
+
+                            </div>
+
+                        </div>
+                    `;
+
+                }
+            )
+            .join("");
+
+
+    mensagem.innerHTML +=
+        `
+        <div
+            class="erros-parciais"
+        >
+
+            ${lista}
+
+        </div>
+        `;
+
+}
+
+
+// ==========================================================
+// TAMANHO DO ARQUIVO
+// ==========================================================
+
+function formatarTamanho(
+    bytes
+) {
+
+    if (
+        bytes === 0
+    ) {
+
+        return "0 B";
+
+    }
+
+
+    const unidades = [
+        "B",
+        "KB",
+        "MB",
+        "GB"
+    ];
+
+
+    const indice =
+        Math.floor(
+            Math.log(bytes) /
+            Math.log(1024)
+        );
+
+
+    const valor =
+        bytes /
+        Math.pow(
+            1024,
+            indice
+        );
+
+
+    return (
+        valor.toFixed(
+            indice === 0
+                ? 0
+                : 1
+        )
+        + " "
+        + unidades[indice]
+    );
+
+}
+
+
+// ==========================================================
+// ESCAPE HTML
+// ==========================================================
 
 function escapeHtml(
     valor
@@ -1257,51 +1013,29 @@ function escapeHtml(
 
     return String(valor)
 
-        .replace(
-            /&/g,
+        .replaceAll(
+            "&",
             "&amp;"
         )
 
-        .replace(
-            /</g,
+        .replaceAll(
+            "<",
             "&lt;"
         )
 
-        .replace(
-            />/g,
+        .replaceAll(
+            ">",
             "&gt;"
         )
 
-        .replace(
-            /"/g,
+        .replaceAll(
+            '"',
             "&quot;"
         )
 
-        .replace(
-            /'/g,
+        .replaceAll(
+            "'",
             "&#039;"
         );
 
 }
-
-
-// ============================================================
-// ESCAPAR ATRIBUTO
-// ============================================================
-
-function escapeAttribute(
-    valor
-) {
-
-    return escapeHtml(
-        valor
-    );
-
-}
-
-
-// ============================================================
-// INICIALIZAÇÃO
-// ============================================================
-
-carregarEstatisticas();

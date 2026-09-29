@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 
@@ -17,14 +16,24 @@
 
     <link
         rel="stylesheet"
-        href="{{ url_for('static', filename='css/style.css') }}"
+        href="{{ url_for(
+            'static',
+            filename='css/style.css'
+        ) }}"
     >
 
 </head>
 
+
 <body>
 
+
 <div class="app">
+
+
+    <!-- ================================================== -->
+    <!-- TOPO -->
+    <!-- ================================================== -->
 
     <header class="topbar">
 
@@ -40,6 +49,7 @@
 
         </div>
 
+
         <div
             id="statusIA"
             class="status"
@@ -50,17 +60,33 @@
     </header>
 
 
+
+    <!-- ================================================== -->
+    <!-- CONTEÚDO -->
+    <!-- ================================================== -->
+
     <main>
+
+
+        <!-- ============================================== -->
+        <!-- UPLOAD -->
+        <!-- ============================================== -->
 
         <section class="upload-card">
 
             <h2>
-                Enviar documento
+                Enviar documentos
             </h2>
 
+
             <p>
-                PDF ou imagem
+                Selecione um ou vários PDFs/imagens.
+                Os documentos serão processados
+                individualmente e reunidos em um único Excel.
             </p>
+
+
+            <!-- DROPZONE -->
 
             <div
                 id="dropzone"
@@ -70,23 +96,47 @@
                 <input
                     type="file"
                     id="arquivo"
-                    accept=".pdf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff"
+                    name="arquivos"
+                    accept="
+                        .pdf,
+                        .png,
+                        .jpg,
+                        .jpeg,
+                        .webp,
+                        .bmp,
+                        .tif,
+                        .tiff
+                    "
+                    multiple
                     hidden
                 >
+
 
                 <div class="drop-icon">
                     📄
                 </div>
 
+
                 <strong>
-                    Clique para selecionar
+                    Clique para selecionar os arquivos
                 </strong>
 
+
                 <span>
-                    ou arraste o documento aqui
+                    ou arraste vários documentos aqui
                 </span>
 
+
+                <small>
+                    Os arquivos serão enviados
+                    um por vez.
+                </small>
+
             </div>
+
+
+
+            <!-- ARQUIVOS -->
 
             <div
                 id="arquivoSelecionado"
@@ -94,15 +144,38 @@
             >
             </div>
 
+
+
+            <!-- BOTÃO -->
+
             <button
                 id="btnProcessar"
                 class="btn-primary"
+                type="button"
             >
-                Processar documento
+
+                Gerar Excel
+
             </button>
+
+
+
+            <!-- MENSAGEM -->
+
+            <div
+                id="mensagem"
+                class="alertas"
+            >
+            </div>
+
 
         </section>
 
+
+
+        <!-- ============================================== -->
+        <!-- PROGRESSO -->
+        <!-- ============================================== -->
 
         <section
             id="loading"
@@ -111,17 +184,44 @@
 
             <div class="spinner"></div>
 
+
             <h3>
-                A IA está analisando o documento...
+                Processando documentos...
             </h3>
 
-            <p>
-                Estamos identificando layout,
-                tabelas e informações agrícolas.
+
+            <p id="progressoTexto">
+                Preparando arquivos...
+            </p>
+
+
+            <div
+                class="barra-progresso"
+            >
+
+                <div
+                    id="barraProgresso"
+                    class="barra-progresso-interna"
+                >
+                </div>
+
+            </div>
+
+
+            <p
+                id="progressoDetalhes"
+                class="progresso-detalhes"
+            >
+                0 de 0 arquivos
             </p>
 
         </section>
 
+
+
+        <!-- ============================================== -->
+        <!-- RESULTADO -->
+        <!-- ============================================== -->
 
         <section
             id="resultado"
@@ -130,166 +230,56 @@
 
             <div class="resultado-header">
 
+
                 <div>
 
                     <h2>
-                        Resultado da IA
+                        Excel pronto
                     </h2>
 
-                    <p id="nomeDocumento">
+
+                    <p
+                        id="nomeDocumento"
+                    >
                     </p>
 
                 </div>
+
 
                 <a
                     id="btnDownload"
                     class="btn-download"
                     href="#"
+                    download
                 >
                     Baixar Excel
                 </a>
 
-            </div>
-
-
-            <div
-                id="alertas"
-                class="alertas"
-            >
-            </div>
-
-
-            <div class="cards">
-
-                <div class="info-card">
-
-                    <span>
-                        Blocos
-                    </span>
-
-                    <strong id="totalBlocos">
-                        0
-                    </strong>
-
-                </div>
-
-                <div class="info-card">
-
-                    <span>
-                        Talhões
-                    </span>
-
-                    <strong id="totalTalhoes">
-                        0
-                    </strong>
-
-                </div>
-
-                <div class="info-card">
-
-                    <span>
-                        Correções
-                    </span>
-
-                    <strong id="totalCorrecoes">
-                        0
-                    </strong>
-
-                </div>
 
             </div>
 
-
-            <div class="metadata">
-
-                <h3>
-                    Informações do documento
-                </h3>
-
-                <div
-                    id="metadataGrid"
-                    class="metadata-grid"
-                >
-                </div>
-
-            </div>
-
-
-            <div class="tabelas">
-
-                <h3>
-                    Talhões identificados
-                </h3>
-
-                <div
-                    id="tabelasBlocos"
-                >
-                </div>
-
-            </div>
 
         </section>
 
-
-        <section class="learning-card">
-
-            <div>
-
-                <h2>
-                    🧠 Aprendizado da IA
-                </h2>
-
-                <p>
-                    Cada correção realizada será armazenada
-                    para formar o dataset da nossa IA.
-                </p>
-
-            </div>
-
-            <div
-                id="estatisticas"
-                class="estatisticas"
-            >
-
-                <div>
-                    <strong id="statDocs">
-                        0
-                    </strong>
-                    <span>
-                        documentos
-                    </span>
-                </div>
-
-                <div>
-                    <strong id="statExtracoes">
-                        0
-                    </strong>
-                    <span>
-                        extrações
-                    </span>
-                </div>
-
-                <div>
-                    <strong id="statCorrecoes">
-                        0
-                    </strong>
-                    <span>
-                        correções
-                    </span>
-                </div>
-
-            </div>
-
-        </section>
 
     </main>
+
 
 </div>
 
 
+
+<!-- ====================================================== -->
+<!-- JAVASCRIPT -->
+<!-- ====================================================== -->
+
 <script
-    src="{{ url_for('static', filename='js/script.js') }}"
+    src="{{ url_for(
+        'static',
+        filename='js/script.js'
+    ) }}"
 ></script>
+
 
 </body>
 

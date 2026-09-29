@@ -1,29 +1,23 @@
-
+import io
 import os
-import json
+import shutil
+import tempfile
+import uuid
 from datetime import datetime
 
 from flask import (
     Flask,
+    jsonify,
     render_template,
     request,
-    jsonify,
-    send_file
+    send_file,
 )
 
-from config import TRAINING_CORRECTIONS
+from werkzeug.utils import secure_filename
 
-from services.document_processor import (
-    get_processor
-)
-
-from services.agricultural_extractor import (
-    extrair_dados
-)
-
-from services.validator import (
-    validar_documento
-)
+from services.document_processor import get_processor
+from services.agricultural_extractor import extrair_dados
+from services.validator import validar_documento
 
 
 # ============================================================
@@ -34,423 +28,403 @@ BASE_DIR = os.path.dirname(
     os.path.abspath(__file__)
 )
 
-UPLOAD_FOLDER = os.path.join(
-    BASE_DIR,
-    "uploads"
-)
 
-RESULTADOS_FOLDER = os.path.join(
-    BASE_DIR,
-    "resultados"
-)
-
-CORRECOES_FOLDER = os.path.join(
-    BASE_DIR,
-    "correcoes"
-)
-
-
-os.makedirs(
-    UPLOAD_FOLDER,
-    exist_ok=True
-)
-
-os.makedirs(
-    RESULTADOS_FOLDER,
-    exist_ok=True
-)
-
-os.makedirs(
-    CORRECOES_FOLDER,
-    exist_ok=True
-)
-
-
-app = Flask(
-    __name__,
-    template_folder="templates",
-    static_folder="static"
-)
-
-
-app.config[
-    "UPLOAD_FOLDER"
-] = UPLOAD_FOLDER
-
-
-# ============================================================
-# EXTENSÕES PERMITIDAS
-# ============================================================
-
-EXTENSOES_PERMITIDAS = {
-    ".pdf",
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".tif",
-    ".tiff"
+ALLOWED_EXTENSIONS = {
+    "pdf",
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+    "bmp",
+    "tif",
+    "tiff",
 }
 
 
+app = Flask(__name__)
+
+# Mantemos um limite alto para cada arquivo individual.
+# O navegador NÃO enviará mais todos os arquivos juntos.
+app.config["MAX_CONTENT_LENGTH"] = (
+    100 * 1024 * 1024
+)
+
+
 # ============================================================
-# UTILIDADES
+# UTILITÁRIOS
 # ============================================================
 
 def extensao_permitida(nome):
+    """
+    Verifica se a extensão do arquivo é permitida.
+    """
 
-    extensao = os.path.splitext(
-        nome
-    )[1].lower()
-
-    return extensao in EXTENSOES_PERMITIDAS
-
-
-def salvar_json(
-    caminho,
-    dados
-):
-
-    with open(
-        caminho,
-        "w",
-        encoding="utf-8"
-    ) as arquivo:
-
-        json.dump(
-            dados,
-            arquivo,
-            ensure_ascii=False,
-            indent=2
-        )
-
-
-def carregar_json(
-    caminho
-):
-
-    if not os.path.exists(
-        caminho
-    ):
-
-        return None
-
-    with open(
-        caminho,
-        "r",
-        encoding="utf-8"
-    ) as arquivo:
-
-        return json.load(
-            arquivo
-        )
-
-
-# ============================================================
-# SALVAR CORREÇÃO
-# ============================================================
-
-def salvar_correcao_json(
-    documento_id,
-    campo,
-    valor_original,
-    valor_corrigido,
-    contexto=""
-):
-
-    os.makedirs(
-        CORRECOES_FOLDER,
-        exist_ok=True
+    return (
+        "." in nome
+        and nome.rsplit(
+            ".",
+            1
+        )[1].lower()
+        in ALLOWED_EXTENSIONS
     )
 
 
-    caminho = os.path.join(
-        CORRECOES_FOLDER,
-        "correcoes.json"
-    )
+def extrair_linhas_excel(documento):
+    """
+    Converte o resultado de UM documento
+    para as 6 colunas finais do Excel.
 
+    Campos:
 
-    dados = carregar_json(
-        caminho
-    )
-
-
-    if not dados:
-
-        dados = []
-
-
-    dados.append({
-
-        "documento_id":
-            documento_id,
-
-        "campo":
-            campo,
-
-        "valor_original":
-            valor_original,
-
-        "valor_corrigido":
-            valor_corrigido,
-
-        "contexto":
-            contexto,
-
-        "data":
-            datetime.now().isoformat()
-
-    })
-
-
-    salvar_json(
-        caminho,
-        dados
-    )
-
-
-# ============================================================
-# CONTAR CORREÇÕES
-# ============================================================
-
-def contar_correcoes():
-
-    caminho = os.path.join(
-        CORRECOES_FOLDER,
-        "correcoes.json"
-    )
-
-
-    dados = carregar_json(
-        caminho
-    )
-
-
-    if not dados:
-
-        return 0
-
-
-    return len(
-        dados
-    )
-
-
-# ============================================================
-# CONTAR DOCUMENTOS
-# ============================================================
-
-def contar_documentos():
-
-    if not os.path.exists(
-        RESULTADOS_FOLDER
-    ):
-
-        return 0
-
-
-    total = 0
-
-
-    for nome in os.listdir(
-        RESULTADOS_FOLDER
-    ):
-
-        caminho = os.path.join(
-            RESULTADOS_FOLDER,
-            nome
-        )
-
-
-        if os.path.isdir(
-            caminho
-        ):
-
-            total += 1
-
-
-    return total
-
-
-# ============================================================
-# EXPORTAR EXCEL
-# SOMENTE OS 6 CAMPOS
-# ============================================================
-
-def exportar_excel(
-    documento,
-    caminho_saida
-):
-
-    import pandas as pd
-
-
-    linhas_talhoes = []
-
+    1. Bloco
+    2. Talhão
+    3. Variedade
+    4. Área
+    5. Plantio
+    6. Propriedade
+    """
 
     metadata = (
-        documento.get(
-            "metadata"
-        )
+        documento.get("metadata")
         or {}
     )
 
-
-    blocos = (
-        documento.get(
-            "blocos"
-        )
-        or []
+    propriedade = (
+        metadata.get("propriedade", "")
+        or ""
     )
 
+    linhas = []
 
-    # ========================================================
-    # PERCORRER BLOCOS E TALHÕES
-    # ========================================================
-
-    for bloco in blocos:
+    for bloco in (
+        documento.get("blocos")
+        or []
+    ):
 
         codigo_bloco = (
-
-            bloco.get(
-                "bloco"
-            )
-
-            or bloco.get(
-                "codigo"
-            )
-
-            or documento.get(
-                "bloco"
-            )
-
+            bloco.get("bloco")
+            or bloco.get("codigo")
             or ""
-
         )
 
-
-        talhoes = (
-            bloco.get(
-                "talhoes"
-            )
+        for talhao in (
+            bloco.get("talhoes")
             or []
-        )
+        ):
 
-
-        for talhao in talhoes:
-
-            linhas_talhoes.append({
+            linhas.append({
 
                 "Bloco":
-                    codigo_bloco,
+                    str(
+                        codigo_bloco
+                        or ""
+                    ),
 
                 "Talhão":
-                    talhao.get(
-                        "talhao",
-                        ""
+                    str(
+                        talhao.get(
+                            "talhao",
+                            ""
+                        )
+                        or ""
                     ),
 
                 "Variedade":
-                    talhao.get(
-                        "variedade",
-                        ""
+                    str(
+                        talhao.get(
+                            "variedade",
+                            ""
+                        )
+                        or ""
                     ),
 
                 "Área":
-                    talhao.get(
-                        "area",
-                        ""
+                    str(
+                        talhao.get(
+                            "area",
+                            ""
+                        )
+                        or ""
                     ),
 
                 "Plantio":
-                    talhao.get(
-                        "plantio",
-                        ""
+                    str(
+                        talhao.get(
+                            "plantio",
+                            ""
+                        )
+                        or ""
                     ),
 
                 "Propriedade":
-                    metadata.get(
-                        "propriedade",
-                        ""
-                    )
-
+                    str(
+                        propriedade
+                        or ""
+                    ),
             })
 
-
-    # ========================================================
-    # DATAFRAME
-    # ========================================================
-
-    df_talhoes = pd.DataFrame(
-        linhas_talhoes
-    )
+    return linhas
 
 
-    # ========================================================
-    # GARANTIR AS 6 COLUNAS
-    # ========================================================
+def criar_excel(linhas):
+    """
+    Cria o Excel somente em memória.
+
+    Nenhum Excel é salvo no projeto.
+    """
+
+    import pandas as pd
 
     colunas = [
-
         "Bloco",
         "Talhão",
         "Variedade",
         "Área",
         "Plantio",
-        "Propriedade"
-
+        "Propriedade",
     ]
 
+    df = pd.DataFrame(
+        linhas,
+        columns=colunas
+    )
 
-    # Caso não exista nenhum talhão,
-    # cria o DataFrame com as colunas corretas.
+    # Mantém tudo como texto.
+    for coluna in colunas:
 
-    if df_talhoes.empty:
-
-        df_talhoes = pd.DataFrame(
-            columns=colunas
+        df[coluna] = (
+            df[coluna]
+            .fillna("")
+            .astype(str)
         )
 
-    else:
-
-        # Garante que somente essas
-        # colunas existam no Excel.
-
-        for coluna in colunas:
-
-            if coluna not in df_talhoes.columns:
-
-                df_talhoes[coluna] = ""
-
-
-        df_talhoes = df_talhoes[
-            colunas
-        ]
-
-
-    # ========================================================
-    # CRIAR EXCEL
-    # ========================================================
+    memoria = io.BytesIO()
 
     with pd.ExcelWriter(
-        caminho_saida,
+        memoria,
         engine="openpyxl"
     ) as writer:
 
-        df_talhoes.to_excel(
+        df.to_excel(
             writer,
             index=False,
-            sheet_name="Talhões"
+            sheet_name="Dados"
+        )
+
+        planilha = (
+            writer.book["Dados"]
+        )
+
+        planilha.freeze_panes = "A2"
+
+        planilha.auto_filter.ref = (
+            planilha.dimensions
+        )
+
+        larguras = {
+            "A": 18,
+            "B": 12,
+            "C": 18,
+            "D": 14,
+            "E": 15,
+            "F": 35,
+        }
+
+        for coluna, largura in (
+            larguras.items()
+        ):
+
+            planilha.column_dimensions[
+                coluna
+            ].width = largura
+
+    memoria.seek(0)
+
+    return memoria
+
+
+def processar_arquivo_temporario(
+    arquivo,
+    processor,
+    indice
+):
+    """
+    Processa UM arquivo.
+
+    O arquivo é salvo somente em uma pasta
+    temporária do sistema.
+
+    Depois do processamento:
+    - upload é apagado;
+    - pasta de resultado do OCR é apagada.
+
+    Nada é salvo em uploads/ do projeto.
+    """
+
+    nome_original = (
+        arquivo.filename
+        or f"documento_{indice}"
+    )
+
+    extensao = os.path.splitext(
+        nome_original
+    )[1].lower()
+
+    pasta_temp = tempfile.mkdtemp(
+        prefix="leitor_documentos_"
+    )
+
+    nome_seguro = secure_filename(
+        nome_original
+    )
+
+    if not nome_seguro:
+
+        nome_seguro = (
+            f"documento_{indice}"
+            f"{extensao}"
+        )
+
+    caminho_temp = os.path.join(
+        pasta_temp,
+        nome_seguro
+    )
+
+    resultado_ocr = None
+
+    try:
+
+        # ----------------------------------------------------
+        # SALVA TEMPORARIAMENTE
+        # ----------------------------------------------------
+
+        arquivo.save(
+            caminho_temp
         )
 
 
-    return caminho_saida
+        # ----------------------------------------------------
+        # ID DO PROCESSAMENTO
+        # ----------------------------------------------------
+
+        documento_id = (
+            datetime.now().strftime(
+                "%Y%m%d_%H%M%S"
+            )
+            + "_"
+            + uuid.uuid4().hex[:8]
+            + f"_{indice}"
+        )
+
+
+        # ----------------------------------------------------
+        # OCR
+        # ----------------------------------------------------
+
+        resultado_ocr = (
+            processor.processar(
+                caminho_temp,
+                documento_id
+            )
+        )
+
+
+        if not resultado_ocr.get(
+            "sucesso"
+        ):
+
+            raise RuntimeError(
+                resultado_ocr.get(
+                    "erro",
+                    "Não foi possível "
+                    "processar o documento."
+                )
+            )
+
+
+        # ----------------------------------------------------
+        # EXTRAÇÃO AGRÍCOLA
+        # ----------------------------------------------------
+
+        documento = extrair_dados(
+            resultado_ocr
+        )
+
+
+        # ----------------------------------------------------
+        # VALIDAÇÃO
+        # ----------------------------------------------------
+
+        documento = validar_documento(
+            documento
+        )
+
+
+        # ----------------------------------------------------
+        # CONVERTE PARA AS 6 COLUNAS
+        # ----------------------------------------------------
+
+        linhas = extrair_linhas_excel(
+            documento
+        )
+
+
+        return {
+            "nome": nome_original,
+            "linhas": linhas,
+        }
+
+
+    finally:
+
+        # ----------------------------------------------------
+        # REMOVE UPLOAD TEMPORÁRIO
+        # ----------------------------------------------------
+
+        try:
+
+            shutil.rmtree(
+                pasta_temp,
+                ignore_errors=True
+            )
+
+        except Exception:
+            pass
+
+
+        # ----------------------------------------------------
+        # REMOVE RESULTADO DO OCR
+        # ----------------------------------------------------
+
+        if resultado_ocr:
+
+            pasta_resultado = (
+                resultado_ocr.get(
+                    "pasta_saida"
+                )
+            )
+
+            if pasta_resultado:
+
+                try:
+
+                    shutil.rmtree(
+                        pasta_resultado,
+                        ignore_errors=True
+                    )
+
+                except Exception:
+                    pass
 
 
 # ============================================================
-# ROTA PRINCIPAL
+# PÁGINA
 # ============================================================
 
-@app.route("/")
+@app.route(
+    "/",
+    methods=["GET"]
+)
 def index():
 
     return render_template(
@@ -459,681 +433,27 @@ def index():
 
 
 # ============================================================
-# PROCESSAR DOCUMENTO
+# PROCESSAR UM ARQUIVO
 # ============================================================
 
 @app.route(
-    "/api/processar",
+    "/api/processar-arquivo",
     methods=["POST"]
 )
-def processar_documento():
+def api_processar_arquivo():
 
-    try:
-
-        if "arquivo" not in request.files:
-
-            return jsonify({
-
-                "sucesso": False,
-
-                "erro":
-                    "Nenhum arquivo enviado."
-
-            }), 400
-
-
-        arquivo = request.files[
-            "arquivo"
-        ]
-
-
-        if not arquivo.filename:
-
-            return jsonify({
-
-                "sucesso": False,
-
-                "erro":
-                    "Nome do arquivo inválido."
-
-            }), 400
-
-
-        if not extensao_permitida(
-            arquivo.filename
-        ):
-
-            return jsonify({
-
-                "sucesso": False,
-
-                "erro":
-                    "Formato de arquivo não permitido."
-
-            }), 400
-
-
-        # ====================================================
-        # NOME SEGURO
-        # ====================================================
-
-        nome_original = arquivo.filename
-
-        nome_base = os.path.splitext(
-            nome_original
-        )[0]
-
-
-        extensao = os.path.splitext(
-            nome_original
-        )[1].lower()
-
-
-        timestamp = datetime.now().strftime(
-            "%Y%m%d_%H%M%S"
-        )
-
-
-        nome_arquivo = (
-            f"{timestamp}_{nome_base}"
-            f"{extensao}"
-        )
-
-
-        caminho_arquivo = os.path.join(
-            UPLOAD_FOLDER,
-            nome_arquivo
-        )
-
-
-        arquivo.save(
-            caminho_arquivo
-        )
-
-
-        # ====================================================
-        # ID DO DOCUMENTO
-        # ====================================================
-
-        documento_id = (
-            f"{timestamp}_{nome_base}"
-        )
-
-
-        # ====================================================
-        # PROCESSAMENTO OCR
-        # ====================================================
-
-        processor = get_processor()
-
-
-        resultado_ocr = processor.processar(
-
-            caminho_arquivo,
-
-            documento_id
-
-        )
-
-
-        if not resultado_ocr.get(
-            "sucesso"
-        ):
-
-            return jsonify({
-
-                "sucesso": False,
-
-                "erro":
-                    resultado_ocr.get(
-                        "erro",
-                        "Erro durante o OCR."
-                    )
-
-            }), 500
-
-
-        # ====================================================
-        # EXTRAÇÃO AGRÍCOLA
-        # ====================================================
-
-        documento = extrair_dados(
-            resultado_ocr
-        )
-
-
-        # ====================================================
-        # VALIDAÇÃO
-        # ====================================================
-
-        documento = validar_documento(
-            documento
-        )
-
-
-        # ====================================================
-        # SALVAR RESULTADO
-        # ====================================================
-
-        pasta_resultado = os.path.join(
-            RESULTADOS_FOLDER,
-            documento_id
-        )
-
-
-        os.makedirs(
-            pasta_resultado,
-            exist_ok=True
-        )
-
-
-        caminho_json = os.path.join(
-            pasta_resultado,
-            "resultado.json"
-        )
-
-
-        salvar_json(
-            caminho_json,
-            documento
-        )
-
-
-        # ====================================================
-        # EXCEL
-        # ====================================================
-
-        caminho_excel = os.path.join(
-            pasta_resultado,
-            "resultado.xlsx"
-        )
-
-
-        exportar_excel(
-            documento,
-            caminho_excel
-        )
-
-
-        # ====================================================
-        # GARANTIR OS CAMPOS PRINCIPAIS
-        # ====================================================
-
-        metadata = (
-            documento.get(
-                "metadata"
-            )
-            or {}
-        )
-
-
-        blocos = (
-            documento.get(
-                "blocos"
-            )
-            or []
-        )
-
-
-        total_talhoes = sum(
-
-            len(
-                bloco.get(
-                    "talhoes",
-                    []
-                )
-            )
-
-            for bloco in blocos
-
-        )
-
-
-        # ====================================================
-        # RESPOSTA
-        # ====================================================
-
-        return jsonify({
-
-            "sucesso": True,
-
-            "documento_id":
-                documento_id,
-
-            "arquivo":
-                nome_original,
-
-            "resultado":
-                documento,
-
-            "total_blocos":
-                len(blocos),
-
-            "total_talhoes":
-                total_talhoes,
-
-            "bloco":
-                metadata.get(
-                    "bloco",
-                    documento.get(
-                        "bloco",
-                        ""
-                    )
-                ),
-
-            "propriedade":
-                metadata.get(
-                    "propriedade",
-                    documento.get(
-                        "propriedade",
-                        ""
-                    )
-                ),
-
-            "download":
-                f"/download/{documento_id}"
-
-        })
-
-
-    except Exception as erro:
-
-        import traceback
-
-        traceback.print_exc()
-
-
-        return jsonify({
-
-            "sucesso": False,
-
-            "erro":
-                str(erro)
-
-        }), 500
-
-
-# ============================================================
-# ESTATÍSTICAS
-# ============================================================
-
-@app.route(
-    "/api/estatisticas",
-    methods=["GET"]
-)
-def estatisticas():
-
-    documentos = contar_documentos()
-
-    correcoes = contar_correcoes()
-
-
-    return jsonify({
-
-        "documentos":
-            documentos,
-
-        "extracoes":
-            documentos,
-
-        "correcoes":
-            correcoes
-
-    })
-
-
-# ============================================================
-# REGISTRAR CORREÇÃO
-# ============================================================
-
-@app.route(
-    "/api/corrigir",
-    methods=["POST"]
-)
-def corrigir():
-
-    try:
-
-        dados = request.get_json(
-            silent=True
-        )
-
-
-        if not dados:
-
-            return jsonify({
-
-                "sucesso": False,
-
-                "erro":
-                    "Dados da correção não enviados."
-
-            }), 400
-
-
-        documento_id = dados.get(
-            "documento_id",
-            ""
-        )
-
-
-        campo = dados.get(
-            "campo",
-            ""
-        )
-
-
-        valor_original = dados.get(
-            "valor_original",
-            ""
-        )
-
-
-        valor_corrigido = dados.get(
-            "valor_corrigido",
-            ""
-        )
-
-
-        contexto = dados.get(
-            "contexto",
-            ""
-        )
-
-
-        # ====================================================
-        # CAMPOS PERMITIDOS
-        # ====================================================
-
-        campos_permitidos = {
-
-            "bloco",
-            "talhao",
-            "variedade",
-            "area",
-            "plantio",
-            "propriedade"
-
-        }
-
-
-        if campo not in campos_permitidos:
-
-            return jsonify({
-
-                "sucesso": False,
-
-                "erro":
-                    "Campo não permitido."
-
-            }), 400
-
-
-        salvar_correcao_json(
-
-            documento_id,
-
-            campo,
-
-            valor_original,
-
-            valor_corrigido,
-
-            contexto
-
-        )
-
-
-        return jsonify({
-
-            "sucesso": True,
-
-            "mensagem":
-                "Correção registrada com sucesso."
-
-        })
-
-
-    except Exception as erro:
-
-        import traceback
-
-        traceback.print_exc()
-
-
-        return jsonify({
-
-            "sucesso": False,
-
-            "erro":
-                str(erro)
-
-        }), 500
-
-
-# ============================================================
-# OBTER DOCUMENTO
-# ============================================================
-
-@app.route(
-    "/api/documento/<documento_id>",
-    methods=["GET"]
-)
-def obter_documento(
-    documento_id
-):
-
-    caminho = os.path.join(
-
-        RESULTADOS_FOLDER,
-
-        documento_id,
-
-        "resultado.json"
-
+    arquivo = request.files.get(
+        "arquivo"
     )
 
 
-    documento = carregar_json(
-        caminho
-    )
-
-
-    if documento is None:
-
-        return jsonify({
-
-            "sucesso": False,
-
-            "erro":
-                "Documento não encontrado."
-
-        }), 404
-
-
-    return jsonify({
-
-        "sucesso": True,
-
-        "resultado":
-            documento
-
-    })
-
-
-# ============================================================
-# CONFIRMAR DOCUMENTO
-# ============================================================
-
-@app.route(
-    "/api/confirmar",
-    methods=["POST"]
-)
-def confirmar():
-
-    try:
-
-        dados = request.get_json(
-            silent=True
-        )
-
-
-        if not dados:
-
-            return jsonify({
-
-                "sucesso": False,
-
-                "erro":
-                    "Dados não enviados."
-
-            }), 400
-
-
-        documento_id = dados.get(
-            "documento_id"
-        )
-
-
-        documento = dados.get(
-            "documento"
-        )
-
-
-        if not documento_id:
-
-            return jsonify({
-
-                "sucesso": False,
-
-                "erro":
-                    "Documento não informado."
-
-            }), 400
-
-
-        if not documento:
-
-            return jsonify({
-
-                "sucesso": False,
-
-                "erro":
-                    "Documento vazio."
-
-            }), 400
-
-
-        # ====================================================
-        # SALVAR DOCUMENTO ATUALIZADO
-        # ====================================================
-
-        pasta = os.path.join(
-
-            RESULTADOS_FOLDER,
-
-            documento_id
-
-        )
-
-
-        os.makedirs(
-            pasta,
-            exist_ok=True
-        )
-
-
-        caminho_json = os.path.join(
-
-            pasta,
-
-            "resultado.json"
-
-        )
-
-
-        salvar_json(
-            caminho_json,
-            documento
-        )
-
-
-        # ====================================================
-        # GERAR EXCEL ATUALIZADO
-        # ====================================================
-
-        caminho_excel = os.path.join(
-
-            pasta,
-
-            "resultado.xlsx"
-
-        )
-
-
-        exportar_excel(
-
-            documento,
-
-            caminho_excel
-
-        )
-
-
-        return jsonify({
-
-            "sucesso": True,
-
-            "mensagem":
-                "Documento confirmado.",
-
-            "download":
-                f"/download/{documento_id}"
-
-        })
-
-
-    except Exception as erro:
-
-        import traceback
-
-        traceback.print_exc()
-
-
-        return jsonify({
-
-            "sucesso": False,
-
-            "erro":
-                str(erro)
-
-        }), 500
-
-
-# ============================================================
-# DOWNLOAD DO EXCEL
-# ============================================================
-
-@app.route(
-    "/download/<documento_id>"
-)
-def download(
-    documento_id
-):
-
-    caminho = os.path.join(
-
-        RESULTADOS_FOLDER,
-
-        documento_id,
-
-        "resultado.xlsx"
-
-    )
-
-
-    if not os.path.exists(
-        caminho
+    # --------------------------------------------------------
+    # VERIFICA ARQUIVO
+    # --------------------------------------------------------
+
+    if (
+        arquivo is None
+        or not arquivo.filename
     ):
 
         return jsonify({
@@ -1141,20 +461,420 @@ def download(
             "sucesso": False,
 
             "erro":
-                "Arquivo Excel não encontrado."
+                "Nenhum arquivo foi enviado."
 
-        }), 404
+        }), 400
 
 
-    return send_file(
+    # --------------------------------------------------------
+    # VERIFICA EXTENSÃO
+    # --------------------------------------------------------
 
-        caminho,
+    if not extensao_permitida(
+        arquivo.filename
+    ):
 
-        as_attachment=True,
+        return jsonify({
 
-        download_name="resultado.xlsx"
+            "sucesso": False,
 
+            "erro":
+                (
+                    "Formato não permitido: "
+                    + arquivo.filename
+                )
+
+        }), 400
+
+
+    try:
+
+        processor = get_processor()
+
+
+        resultado = (
+            processar_arquivo_temporario(
+                arquivo,
+                processor,
+                1
+            )
+        )
+
+
+        linhas = (
+            resultado.get(
+                "linhas",
+                []
+            )
+        )
+
+
+        return jsonify({
+
+            "sucesso": True,
+
+            "nome":
+                resultado["nome"],
+
+            "linhas":
+                linhas,
+
+            "quantidade_linhas":
+                len(linhas),
+
+        })
+
+
+    except Exception as erro:
+
+        import traceback
+
+        traceback.print_exc()
+
+
+        return jsonify({
+
+            "sucesso": False,
+
+            "erro":
+                str(erro),
+
+        }), 500
+
+
+# ============================================================
+# GERAR EXCEL FINAL
+# ============================================================
+
+@app.route(
+    "/api/gerar-excel",
+    methods=["POST"]
+)
+def api_gerar_excel():
+
+    try:
+
+        dados = request.get_json(
+            silent=True
+        )
+
+
+        if not dados:
+
+            return jsonify({
+
+                "sucesso": False,
+
+                "erro":
+                    "Nenhum dado foi recebido."
+
+            }), 400
+
+
+        linhas = (
+            dados.get(
+                "linhas",
+                []
+            )
+        )
+
+
+        if not isinstance(
+            linhas,
+            list
+        ):
+
+            return jsonify({
+
+                "sucesso": False,
+
+                "erro":
+                    "Formato de dados inválido."
+
+            }), 400
+
+
+        if not linhas:
+
+            return jsonify({
+
+                "sucesso": False,
+
+                "erro":
+                    (
+                        "Nenhuma linha foi "
+                        "extraída dos arquivos."
+                    )
+
+            }), 422
+
+
+        # ----------------------------------------------------
+        # GERA EXCEL
+        # ----------------------------------------------------
+
+        excel = criar_excel(
+            linhas
+        )
+
+
+        nome_download = (
+            "dados_agricolas_"
+            + datetime.now().strftime(
+                "%Y%m%d_%H%M%S"
+            )
+            + ".xlsx"
+        )
+
+
+        resposta = send_file(
+
+            excel,
+
+            as_attachment=True,
+
+            download_name=(
+                nome_download
+            ),
+
+            mimetype=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+
+        )
+
+
+        return resposta
+
+
+    except Exception as erro:
+
+        import traceback
+
+        traceback.print_exc()
+
+
+        return jsonify({
+
+            "sucesso": False,
+
+            "erro":
+                str(erro),
+
+        }), 500
+
+
+# ============================================================
+# COMPATIBILIDADE
+# ============================================================
+
+@app.route(
+    "/api/processar",
+    methods=["POST"]
+)
+def api_processar_compatibilidade():
+
+    """
+    Mantém a rota antiga funcionando.
+
+    Porém o novo JavaScript não utiliza essa rota.
+
+    A nova rota /api/processar-arquivo
+    envia somente UM arquivo por requisição.
+    """
+
+    arquivos = request.files.getlist(
+        "arquivos"
     )
+
+
+    if not arquivos:
+
+        arquivo = request.files.get(
+            "arquivo"
+        )
+
+        if arquivo is not None:
+
+            arquivos = [arquivo]
+
+
+    if not arquivos:
+
+        return jsonify({
+
+            "sucesso": False,
+
+            "erro":
+                "Nenhum arquivo foi enviado."
+
+        }), 400
+
+
+    try:
+
+        processor = get_processor()
+
+        todas_linhas = []
+
+        erros = []
+
+        processados = 0
+
+
+        for indice, arquivo in enumerate(
+            arquivos,
+            start=1
+        ):
+
+            if (
+                not arquivo
+                or not arquivo.filename
+            ):
+                continue
+
+
+            if not extensao_permitida(
+                arquivo.filename
+            ):
+
+                erros.append({
+
+                    "arquivo":
+                        arquivo.filename,
+
+                    "erro":
+                        "Formato não permitido."
+
+                })
+
+                continue
+
+
+            try:
+
+                resultado = (
+                    processar_arquivo_temporario(
+                        arquivo,
+                        processor,
+                        indice
+                    )
+                )
+
+
+                todas_linhas.extend(
+                    resultado["linhas"]
+                )
+
+
+                processados += 1
+
+
+            except Exception as erro:
+
+                erros.append({
+
+                    "arquivo":
+                        arquivo.filename,
+
+                    "erro":
+                        str(erro),
+
+                })
+
+
+        if not todas_linhas:
+
+            return jsonify({
+
+                "sucesso": False,
+
+                "erro":
+                    (
+                        "Nenhum dado agrícola "
+                        "foi extraído."
+                    ),
+
+                "erros":
+                    erros,
+
+            }), 422
+
+
+        excel = criar_excel(
+            todas_linhas
+        )
+
+
+        nome_download = (
+            "dados_agricolas_"
+            + datetime.now().strftime(
+                "%Y%m%d_%H%M%S"
+            )
+            + ".xlsx"
+        )
+
+
+        resposta = send_file(
+
+            excel,
+
+            as_attachment=True,
+
+            download_name=(
+                nome_download
+            ),
+
+            mimetype=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+
+        )
+
+
+        resposta.headers[
+            "X-Arquivos-Processados"
+        ] = str(
+            processados
+        )
+
+
+        resposta.headers[
+            "X-Linhas-Extraidas"
+        ] = str(
+            len(todas_linhas)
+        )
+
+
+        if erros:
+
+            resposta.headers[
+                "X-Arquivos-Com-Erros"
+            ] = str(
+                len(erros)
+            )
+
+
+        return resposta
+
+
+    except Exception as erro:
+
+        import traceback
+
+        traceback.print_exc()
+
+
+        return jsonify({
+
+            "sucesso": False,
+
+            "erro":
+                str(erro),
+
+        }), 500
 
 
 # ============================================================
@@ -1162,33 +882,46 @@ def download(
 # ============================================================
 
 @app.errorhandler(413)
-def arquivo_muito_grande(
-    erro
-):
+def arquivo_muito_grande(_erro):
 
     return jsonify({
 
         "sucesso": False,
 
         "erro":
-            "O arquivo enviado é muito grande."
+            (
+                "O arquivo individual "
+                "ultrapassa o limite de "
+                "100 MB."
+            )
 
     }), 413
 
 
 # ============================================================
-# EXECUÇÃO
+# INICIALIZAÇÃO
 # ============================================================
 
 if __name__ == "__main__":
+
+    print("=" * 70)
+    print("IA DOCUMENTOS AGRÍCOLAS")
+    print("Modo: múltiplos arquivos -> Excel")
+    print("Upload: arquivos processados individualmente")
+    print("=" * 70)
+
 
     app.run(
 
         host="0.0.0.0",
 
-        port=5000,
+        port=int(
+            os.environ.get(
+                "PORT",
+                5000
+            )
+        ),
 
-        debug=True
+        debug=True,
 
     )
-

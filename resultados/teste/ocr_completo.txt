@@ -4,66 +4,77 @@ PÁGINA 1
 
 ======================================================================
 
-Área(ha)| Área (ha)| Plantio | Talhão | Variedade [Área |Área(ha)| (ha)| Plantio | o
-RB975201 | 39,56 |02/05/2026 ctc9006 | 25,20 [03/05/2026 |
-RB975201 | 35,28 |02/05/2026 RB975375 | 19,40 [03/06/2026
-RB975201 | 4,49 02/05/2026 ctc9006 | 23,12 |03/05/2026 a
-| 4 | RB975201 02/05/2026 RB975375 | 31,99 |22/04/2026
-RB975201 | 16,90 02/05/2026 RB975375 | 29,57 |22/04/2026
-| 6 | RB975201 02/05/2026 RB975375 22/04/2026
-RB975201 | 33,51 |02/05/2026 RB975375 | 18,36 |22/04/2026
-| 8 | RB975201 | 25,58 |02/05/2026 RB975375 | 15,23 |22/04/2026
-| 9 | RB975201 | 23,82 RB975375 | 11,83 |22/04/2026
-RB975375 | 31,89 [03/06/2026] | S| oes |
-4
-APP 3 5,40ha
-APP 4,49ha APP
-q =~ APP
-2 5
-J. 35,28ha 16,90ha É
-1 wd an
-39,56ha É E Pitig PASTO
-% A
-| . 2
-- 25,58ha 9 8
-6 23,82ha Ba
-9,17ha 7 . a
-33,51ha ‘ E
-APP É i
-APP |
-10 no, 11
-. 31,89ha 25,20ha |!
-16
-14 2,35ha app /
-31,99ha op
-<
-15 ~ . Pátio
-12 wag Fj xo | É
-3 29,57ha . 19,40ha = a ES
-- No m
-q .
-va 17 13 i
-1 18,36ha 23,12ha if
-N |
-18 8 i
-Arvores CANA Pas ° Lixo 15,23ha N |
-O Cascalho 19 I
-, 11,83ha JN
-RESUMO DE ÁREAS (ha) LF. a
-Area de Cana 402,65 i
-Area de Carreador 17,03 <
-Pátio Fixo 1,37 a
-Cascalho 0,88 8
-Estrada 1,73 &
-Árvores 1,03 Vv
-Area Total 424,69
-Bloco: Status:
-409F0002 Mapa de Safra 2027/28 Area de Cana: 402,65 ha ou 166,38 alq. Localização
-Ly | Agrupamento: Área de Carreador: 17,03 ha ou 7,04 alq. er wee + es.
-Usina Vertente Propristário: ietário: Area A de Carreador (%): 4,05% Ei ‘a 4 à veses PRO are
-Marco Aidar Ittavo A É
-Un. Gestora: Vertente Propriedade: Fazenda Santa Amélia ÁREA « TOTAL : 424,69 ha ou 175,49 alq. [A À «és EO cots a ( sh ee
-Municipio: Levantamento: Data ultimo desenho Escala: Decliv. Média: 0)2) sf ime a
-COATLAS Guaraci - SP Jeová 24/06/2026 1/17.500 A 2 lin
-agrimensure &topografa & Distancia até Unidade Gestora (km): Tipo Desenho: Latitude / Longitude (Sirgas - 2000) PAD “ "Ses, el
-Rito a be se Convencional Carlos Alberto 20º22'32,942"S / 49°5'01,523"W E =. a
+NQ
+us
+“>
+fe SY À LARA
+Á \
+LF. We 18 \
+AC
+VA Av
+)
+6 Vf
+0 S . LARANJA
+//
+,
+7 À
+0,8 0.89ha f y
+/. / ) |
+A
+HOME APP
+wf RESTS —
+SY Y bpp Eucalipto >) Terra Nua YY \
+SY & Y RORY Sy 1 y/ sue
+Ny SA VA jp 33 6959] \ 06 Q A )
+“by by G SK Off 14,28ha / 25 \ VS] Ves f f
+| |. SA Of 26 5.4Tha voo LL L 16 | MATA
+| . Y ha J. ; i 12,59ha
+(A / A A ip EE J f ir )
+ROÇA y GY Wyss 13 Yi yy WY
+q / / Ui 7,78ha Hyg)
+Se A / 10 WH LX 7
+S e LF. A \ 4,55ha 15 Lip
+A E, == 4 Yj 4,02ha
+te, 48 7 Ve, Í
+S, 39,48ha AN . IN
+A \ NN LARANJA
+2 X
+o, \ / WN j
+cA 2, q y
+a N \ Na “4 po
+/ y
+7 : LF.
+LE /
+ee, APP ) LARANIA
+TI
+en o | ms af | F =
+S S | free. ‘A À
+a >
+A a a,
+m
+MATA ==
+[Talhão[ Variedade | Área | Plantio | Talhão [ Variedade | Área | Plantio |
+RESUMO DE ÁREAS (ha
+de Cana 210,28 | 2 | crca | 7.28 [06042023] 22 | RB966928 | 1,06 | 2013 |
+Area
+Area de Carreador 13,52 [| 4 | cre | 633 | 06/04/2023 | [26
+Area sem Plantar a 29,07 [5 | cre | 415 [06042023] 33 | | 14,28 [10/04/2026]
+Cal Caixa : de de Cont vontenção = 0,02 | 6 | CTC9003 | 1,06 10/04/2026 34 | CTC9003 | 2137 [ 10/04/2026
+aura
+Eucalipto 5,00 Pedra [| 0 455 | 20260 | 36 | | 11,39 [15/03/2025]
+Pedra 0,03 1,0
+Árvore 0,02 di Árvore | 13 [SEMPLANTAR| 778 | 20260 | 41 | crcsoos | 1505 [06/04/2023
+Terra erra N Nua | ‘ | 15 |SEMPLANTAR| 402 | 20260 | 43 | crcoos | 303 [06/04/2023]
+- 5,80 O Caixa de Contenção $ | 16 |SEMPLANTAR| 1259 | 2026 | [45 48 | crco0s | 39,48 [15/03/2025]
+Area Total 263,69 | 18 | crcsooos | 484 [151032025] | 239,30 Tso [|
+Bloco: 302F0006| Status: Mapa de Safra 2027/28 |Areade |AreadeCana: Cana: 210,23 ha ou 86,87 alq . a
+> Agrupamento: G see
+Tereos tea de 13,52ha 3 5,59 alg am | is
+Td Proprietário: Area ‘ de Carreador (%): 5,23% 0 4 | q Y Vik ; A Eta eee
+Antonio Francisco Junqueira Franco per ez :
+Un. Gestora: Propriedade: ÁREA AREATOTAL: TOTAL : 263,69 ha ou 108,96 alq S02F0006 fal E “ an er di
+Fazenda Santa Lúcia Oy gl
+JATLAS Município: Levantamento: Data último desenho | Escala: | Decliv. Média: § pana fi
+JI Barretos - SP Jeova 17/07/2026 [17 1/ 15.000 RR
+agrinenturs & topografia Distancia até Unidade Gestora (km): Desenho: Latitude Longitude - 2000) ptt pes ag en. el wa -
+e o et 24 km MO Arthur Almeida |20º40'44,682"S/48º42'26,609'W cow po IS ea ADA
