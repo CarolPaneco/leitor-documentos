@@ -3095,10 +3095,12 @@ def _v9_result(processed: Dict[str, Any]) -> Dict[str, Any]:
         })
         todos.extend(talhoes)
 
-    # Mantém somente os dois metadados que a aplicação realmente exibe.
+    # Mantém os metadados utilizados pela aplicação.
     metadata_final = {
         "bloco": metadata.get("bloco", "") if len(blocos) <= 1 else "",
         "propriedade": metadata.get("propriedade", ""),
+        "proprietario": metadata.get("proprietario", ""),
+        "municipio": metadata.get("municipio", ""),
     }
 
     # Quando há vários blocos, cada tabela já possui o bloco próprio.
@@ -4312,6 +4314,8 @@ def _v10_result(processed):
     metadata_final = {
         "bloco": bloco,
         "propriedade": propriedade,
+        "proprietario": metadata.get("proprietario", ""),
+        "municipio": metadata.get("municipio", ""),
     }
 
     meta_score = sum(
@@ -6057,6 +6061,14 @@ def _v12_result(processed):
     )
     resultado["metadata"]["bloco"] = bloco
     resultado["metadata"]["propriedade"] = propriedade
+    resultado["metadata"]["proprietario"] = (
+        base.get("metadata", {}).get("proprietario", "")
+        or base.get("proprietario", "")
+    )
+    resultado["metadata"]["municipio"] = (
+        base.get("metadata", {}).get("municipio", "")
+        or base.get("municipio", "")
+    )
 
     resultado["avisos"] = list(
         resultado.get("avisos") or []
@@ -7280,6 +7292,127 @@ def _v16_ler_tabela_topo(caminho):
     return resultados
 
 
+
+def _v16_recuperar_metadados(words):
+    """Recupera Proprietário e Município diretamente pela posição do OCR."""
+    if not words:
+        return {"proprietario": "", "municipio": ""}
+
+    ordenadas = sorted(
+        words,
+        key=lambda w: (_cy(w), _word_x(w))
+    )
+
+    def normalizar(v):
+        return " ".join(str(v or "").split()).strip()
+
+    def chave(v):
+        return _key(normalizar(v))
+
+    resultado = {
+        "proprietario": "",
+        "municipio": "",
+    }
+
+    # ------------------------------------------------------------
+    # PROPRIETÁRIO
+    # ------------------------------------------------------------
+    # Não usamos texto linear aqui, porque o OCR pode colocar ruído
+    # entre o rótulo e o nome. Usamos a posição X/Y do documento.
+    indice_prop = None
+    for i, w in enumerate(ordenadas):
+        if "proprietario" in chave(_word_text(w)):
+            indice_prop = i
+            break
+
+    if indice_prop is not None:
+        ancora = ordenadas[indice_prop]
+        ay = _cy(ancora)
+        ax = _word_x(ancora)
+
+        candidatos = []
+        for w in ordenadas:
+            wy = _cy(w)
+            wx = _word_x(w)
+            texto = normalizar(_word_text(w))
+            if not texto:
+                continue
+
+            # O nome fica logo abaixo do rótulo, alinhado à esquerda.
+            if wy <= ay + 8 or wy > ay + 70:
+                continue
+            if wx < ax - 20 or wx > ax + 500:
+                continue
+            if chave(texto) in {
+                "propriedade", "municipio", "un gestora",
+                "area", "area de carreador", "area total",
+            }:
+                continue
+
+            candidatos.append(w)
+
+        # Agrupa as palavras da linha imediatamente abaixo.
+        if candidatos:
+            y_ref = min(_cy(w) for w in candidatos)
+            linha = [
+                w for w in candidatos
+                if abs(_cy(w) - y_ref) <= 12
+            ]
+            linha.sort(key=_word_x)
+            valor = normalizar(" ".join(_word_text(w) for w in linha))
+
+            if len(valor.split()) >= 2:
+                resultado["proprietario"] = valor
+
+    # ------------------------------------------------------------
+    # MUNICÍPIO
+    # ------------------------------------------------------------
+    indice_mun = None
+    for i, w in enumerate(ordenadas):
+        if "municipio" in chave(_word_text(w)):
+            indice_mun = i
+            break
+
+    if indice_mun is not None:
+        ancora = ordenadas[indice_mun]
+        ay = _cy(ancora)
+        ax = _word_x(ancora)
+
+        candidatos = []
+        for w in ordenadas:
+            wy = _cy(w)
+            wx = _word_x(w)
+            texto = normalizar(_word_text(w))
+            if not texto:
+                continue
+            if wy <= ay + 15 or wy > ay + 90:
+                continue
+            if wx < ax - 20 or wx > ax + 500:
+                continue
+            candidatos.append(w)
+
+        if candidatos:
+            y_ref = min(_cy(w) for w in candidatos)
+            linha = [
+                w for w in candidatos
+                if abs(_cy(w) - y_ref) <= 12
+            ]
+            linha.sort(key=_word_x)
+            valor = normalizar(" ".join(_word_text(w) for w in linha))
+
+            # O documento possui o município no formato Cidade - UF.
+            m = re.search(
+                r"([A-Za-zÀ-ÿ]{3,})\s*[-–]\s*([A-Za-z]{2})",
+                valor,
+                re.I,
+            )
+            if m:
+                resultado["municipio"] = (
+                    f"{m.group(1).strip()} - {m.group(2).upper()}"
+                )
+
+    return resultado
+
 def _v16_result(processed):
     paginas = (
         processed.get("paginas")
@@ -7311,6 +7444,17 @@ def _v16_result(processed):
         return _v15_result(processed)
 
     base = _v11_extrair_dados_publico(processed)
+
+    # O V16 reconstrói a tabela a partir da imagem. Portanto, recuperamos
+    # também os dois metadados diretamente do OCR espacial antes de montar
+    # o resultado final, para que a reconstrução da tabela não os descarte.
+    metadata_v16 = {}
+    for page in paginas:
+        page_words = _page_words(page)
+        recuperados = _v16_recuperar_metadados(page_words)
+        for campo in ("proprietario", "municipio"):
+            if recuperados.get(campo) and not metadata_v16.get(campo):
+                metadata_v16[campo] = recuperados[campo]
 
     bloco = (
         base.get("bloco")
@@ -7345,6 +7489,18 @@ def _v16_result(processed):
     )
     resultado["metadata"]["bloco"] = bloco
     resultado["metadata"]["propriedade"] = propriedade
+    resultado["metadata"]["proprietario"] = (
+        metadata_v16.get("proprietario")
+        or resultado["metadata"].get("proprietario", "")
+        or base.get("proprietario", "")
+    )
+    resultado["metadata"]["municipio"] = (
+        metadata_v16.get("municipio")
+        or resultado["metadata"].get("municipio", "")
+        or base.get("municipio", "")
+    )
+    resultado["proprietario"] = resultado["metadata"]["proprietario"]
+    resultado["municipio"] = resultado["metadata"]["municipio"]
 
     resultado["avisos"] = list(
         resultado.get("avisos") or []

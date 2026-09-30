@@ -82,6 +82,8 @@ def extrair_linhas_excel(documento):
     4. Área
     5. Plantio
     6. Propriedade
+    7. Proprietário
+    8. Município
     """
 
     metadata = (
@@ -91,6 +93,16 @@ def extrair_linhas_excel(documento):
 
     propriedade = (
         metadata.get("propriedade", "")
+        or ""
+    )
+
+    proprietario = (
+        metadata.get("proprietario", "")
+        or ""
+    )
+
+    municipio = (
+        metadata.get("municipio", "")
         or ""
     )
 
@@ -161,6 +173,18 @@ def extrair_linhas_excel(documento):
                         propriedade
                         or ""
                     ),
+
+                "Proprietário":
+                    str(
+                        proprietario
+                        or ""
+                    ),
+
+                "Município":
+                    str(
+                        municipio
+                        or ""
+                    ),
             })
 
     return linhas
@@ -182,6 +206,8 @@ def criar_excel(linhas):
         "Área",
         "Plantio",
         "Propriedade",
+        "Proprietário",
+        "Município",
     ]
 
     df = pd.DataFrame(
@@ -228,6 +254,8 @@ def criar_excel(linhas):
             "D": 14,
             "E": 15,
             "F": 35,
+            "G": 35,
+            "H": 20,
         }
 
         for coluna, largura in (
