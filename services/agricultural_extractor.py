@@ -2252,6 +2252,148 @@ def _merge_metadata(primary: Dict[str, str], secondary: Dict[str, str]) -> Dict[
     return out
 
 
+def _repair_owner_municipality_final(words: List[Dict[str, Any]], md: Dict[str, str]) -> Dict[str, str]:
+    """
+    Camada final e genérica para Proprietário/Município.
+
+    Regra: quando o documento possui um rótulo identificável, o valor
+    espacialmente alinhado logo abaixo/ao lado do rótulo tem prioridade
+    sobre heurísticas lineares anteriores.
+
+    Não depende de bloco, propriedade, cidade ou proprietário específicos.
+    """
+    words = sorted(words, key=lambda w: (_cy(w), _word_x(w)))
+
+    # --------------------------------------------------------
+    # região de metadados: normalmente os rótulos ficam no rodapé.
+    # Não usamos coordenadas absolutas.
+    # --------------------------------------------------------
+    block_hits = [w for w in words if BLOCK_RE.search(_word_text(w))]
+    if block_hits:
+        footer_y = min(_cy(w) for w in block_hits)
+        footer = [w for w in words if _cy(w) >= footer_y - 8]
+    else:
+        footer = words
+
+    def anchor(labels):
+        # Nesta camada final, use somente correspondência exata normalizada
+        # do rótulo. A busca fuzzy é perigosa em OCR ruidoso porque pode
+        # transformar palavras do mapa em falsos anchors.
+        target = {_key(x) for x in labels}
+        direct = [w for w in footer if _key(_word_text(w)) in target]
+        if direct:
+            return sorted(direct, key=lambda w: (_cy(w), _word_x(w)))[0]
+        return None
+
+    stop_keys = {
+        "proprietario", "propristario", "propriedade", "municipio",
+        "municipio:", "un", "gestora", "levantamento", "data",
+        "ultimo", "desenho", "escala", "decliv", "media", "tipo",
+        "status", "area", "total", "de", "cana", "carreador",
+        "resumo", "agrupamento",
+    }
+
+    def is_clean_name_token(t):
+        t = _clean_token(t)
+        k = _key(t)
+        if not t or k in stop_keys:
+            return False
+        # Nome de pessoa/proprietário: palavras alfabéticas, sem números.
+        return bool(re.fullmatch(r"[A-Za-zÀ-ÿ]{2,}[.,]?", t))
+
+    def value_rows_after(a, max_dy=65):
+        ay = _cy(a)
+        ax = _cx(a)
+        rows = _group_by_y(footer, tolerance=8)
+        out = []
+        for row in rows:
+            ry = sum(_cy(w) for w in row) / len(row)
+            dy = ry - ay
+            if dy <= 2 or dy > max_dy:
+                continue
+            # O valor deve ocupar a mesma coluna/região do rótulo.
+            vals = []
+            for w in row:
+                wx = _cx(w)
+                # O nome pode ocupar várias palavras e ultrapassar bastante
+                # a largura do rótulo. Usamos a coluna inicial do campo, não
+                # a distância ao centro do rótulo.
+                if _word_x(w) >= _word_x(a) - 5 and _word_x(w) <= _word_x(a) + 430 and _word_text(w):
+                    vals.append(w)
+            if vals:
+                out.append((dy, vals))
+        out.sort(key=lambda x: x[0])
+        return out
+
+    # --------------------------------------------------------
+    # PROPRIETÁRIO
+    # --------------------------------------------------------
+    a = anchor(FIELD_LABELS["proprietario"])
+    if a:
+        # 1) Primeira linha abaixo do rótulo, na mesma coluna.
+        for _, row in value_rows_after(a, 55):
+            vals = [w for w in row if is_clean_name_token(_word_text(w))]
+            if len(vals) >= 2:
+                vals.sort(key=_word_x)
+                candidate = _norm(" ".join(_word_text(w) for w in vals[:6]))
+                if len(candidate.split()) >= 2:
+                    md["proprietario"] = candidate
+                    break
+
+        # 2) Caso o valor esteja na mesma linha do rótulo, procura à direita.
+        if not md.get("proprietario"):
+            ay = _cy(a)
+            ax2 = _word_x(a) + _word_w(a)
+            vals = []
+            for w in footer:
+                if abs(_cy(w) - ay) <= 10 and _word_x(w) >= ax2 and _word_x(w) <= _word_x(a) + 430:
+                    if is_clean_name_token(_word_text(w)):
+                        vals.append(w)
+            if len(vals) >= 2:
+                vals.sort(key=_word_x)
+                md["proprietario"] = _norm(" ".join(_word_text(w) for w in vals[:6]))
+
+    # --------------------------------------------------------
+    # MUNICÍPIO
+    # --------------------------------------------------------
+    a = anchor(FIELD_LABELS["municipio"])
+    if a:
+        ay = _cy(a)
+        ax = _cx(a)
+        city_candidates = []
+        uf_candidates = []
+
+        # Cidade/UF podem estar na mesma linha ou na linha imediatamente abaixo.
+        for w in footer:
+            t = _clean_token(_word_text(w)).strip("-–")
+            if not t:
+                continue
+            dy = _cy(w) - ay
+            dx = abs(_cx(w) - ax)
+            if dy < -5 or dy > 60 or dx > 140:
+                continue
+            if re.fullmatch(r"[A-Za-zÀ-ÿ]{3,}", t):
+                city_candidates.append((dy, dx, w, t))
+            elif re.fullmatch(r"[A-Z]{2}", t):
+                uf_candidates.append((dy, dx, w, t.upper()))
+
+        pairs = []
+        for _, _, cw, city in city_candidates:
+            for _, _, sw, uf in uf_candidates:
+                if abs(_cy(sw) - _cy(cw)) <= 14:
+                    score = abs(_cx(cw) - ax) + abs(_cy(cw) - ay) + abs(_cx(sw) - _cx(cw))
+                    pairs.append((score, city, uf))
+
+        if pairs:
+            pairs.sort(key=lambda x: x[0])
+            _, city, uf = pairs[0]
+            # Rejeita falsos positivos conhecidos de rótulos/empresas.
+            if _key(city) not in {"coatlas", "usina", "sao", "são"}:
+                md["municipio"] = f"{city} - {uf}"
+
+    return md
+
+
 def _extract_metadata_v7(words: List[Dict[str, Any]]) -> Dict[str, str]:
     md = _BASE_EXTRACT_METADATA_V7(words)
     text = " ".join(_word_text(w) for w in sorted(words, key=lambda w: (_cy(w), _word_x(w))))
@@ -2311,6 +2453,10 @@ def _extract_metadata_v7(words: List[Dict[str, Any]]) -> Dict[str, str]:
 
     if _key(md.get("desenho", "")) == "caros alberto":
         md["desenho"] = "Carlos Alberto"
+
+    # Última camada: corrige conflitos produzidos pelas heurísticas
+    # anteriores usando a evidência espacial do próprio rótulo.
+    md = _repair_owner_municipality_final(words, md)
 
     return md
 
@@ -7513,5 +7659,44 @@ def _v16_result(processed):
 
 
 # V16 torna-se a camada pública final.
+#
+# IMPORTANTE: a V16 só é usada quando encontra pelo menos 25 registros.
+# Portanto, a recuperação de Proprietário/Município precisa acontecer
+# também nos documentos menores (19, 8, 21, etc.).
 def extrair_dados(processed):
-    return _v16_result(processed)
+    resultado = _v16_result(processed)
+
+    paginas = (
+        processed.get("paginas")
+        or processed.get("pages")
+        or []
+    )
+
+    # Recupera os metadados diretamente do OCR espacial, independentemente
+    # de qual versão da tabela foi escolhida.
+    recuperados = {
+        "proprietario": "",
+        "municipio": "",
+    }
+
+    for page in paginas:
+        page_words = _page_words(page)
+        md = _v16_recuperar_metadados(page_words)
+
+        for campo in ("proprietario", "municipio"):
+            if md.get(campo) and not recuperados[campo]:
+                recuperados[campo] = md[campo]
+
+    resultado["metadata"] = dict(
+        resultado.get("metadata") or {}
+    )
+
+    if recuperados["proprietario"]:
+        resultado["metadata"]["proprietario"] = recuperados["proprietario"]
+        resultado["proprietario"] = recuperados["proprietario"]
+
+    if recuperados["municipio"]:
+        resultado["metadata"]["municipio"] = recuperados["municipio"]
+        resultado["municipio"] = recuperados["municipio"]
+
+    return resultado

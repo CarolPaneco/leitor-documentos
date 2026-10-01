@@ -569,12 +569,23 @@ class DocumentProcessor:
         )
 
         # ----------------------------------------------------
+        # OCR ALTERNATIVO PARA LAYOUTS DE MAPA/RODAPÉ
+        # ----------------------------------------------------
+        # PSM 3 costuma recuperar rótulos e valores lineares que o PSM 6
+        # perde, sem substituir o OCR principal usado pela tabela.
+        dados_ocr_global = self._executar_ocr(
+            imagem_contraste,
+            psm=3
+        )
+
+        # ----------------------------------------------------
         # CONSOLIDAR
         # ----------------------------------------------------
 
         palavras = self._consolidar_ocr(
             dados_ocr,
-            dados_ocr_threshold
+            dados_ocr_threshold,
+            dados_ocr_global
         )
 
         print(
@@ -655,11 +666,13 @@ class DocumentProcessor:
 
     def _executar_ocr(
         self,
-        imagem: np.ndarray
+        imagem: np.ndarray,
+        psm: int = None
     ) -> List[Dict[str, Any]]:
 
+        modo = PSM_PADRAO if psm is None else psm
         config = (
-            f"--oem 3 --psm {PSM_PADRAO}"
+            f"--oem 3 --psm {modo}"
         )
 
         resultado = pytesseract.image_to_data(
