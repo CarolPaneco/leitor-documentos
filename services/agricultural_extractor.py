@@ -8965,6 +8965,59 @@ def _v17_recuperar_metadados_final(processed):
     return campos
 
 
+
+def _v19_normalizar_municipio_valor(valor):
+    """Normaliza município sem inventar informação.
+
+    Corrige principalmente duplicações produzidas pelo OCR, como
+    ``Guapiaçu cuapiaçu - SP``, mantendo a grafia mais completa.
+    """
+    valor = " ".join(str(valor or "").split()).strip(" |:-")
+    if not valor:
+        return ""
+
+    m = re.search(
+        r"^(.+?)\s*[-–]\s*([A-Za-z]{2})$",
+        valor,
+        re.I,
+    )
+    if not m:
+        m = re.search(
+            r"^(.+?)\s+([A-Za-z]{2})$",
+            valor,
+            re.I,
+        )
+    if not m:
+        return valor
+
+    cidade = " ".join(m.group(1).split())
+    uf = m.group(2).upper()
+    partes = cidade.split()
+
+    limpas = []
+    for parte in partes:
+        chave_atual = _key(parte)
+        if len(chave_atual) <= 1:
+            continue
+
+        if limpas:
+            anterior = _key(limpas[-1])
+            if (
+                len(anterior) >= 5
+                and len(chave_atual) >= 5
+                and SequenceMatcher(None, anterior, chave_atual).ratio() >= 0.78
+            ):
+                # Se uma das duas versões for claramente mais completa,
+                # preserva a mais completa. Caso contrário, preserva a primeira.
+                if len(chave_atual) > len(anterior):
+                    limpas[-1] = parte
+                continue
+
+        limpas.append(parte)
+
+    cidade = " ".join(limpas).strip()
+    return f"{cidade} - {uf}" if cidade else ""
+
 def extrair_dados(processed):
     resultado = _v16_result(processed)
 
@@ -9000,6 +9053,13 @@ def extrair_dados(processed):
         processed,
         md,
     )
+
+    # Última limpeza de município: nunca aceita duplicação textual
+    # produzida por OCR como se fosse um novo município.
+    if md.get("municipio"):
+        md["municipio"] = _v19_normalizar_municipio_valor(
+            md["municipio"]
+        )
 
     resultado["metadata"] = dict(
         resultado.get("metadata")
@@ -9041,9 +9101,13 @@ def extrair_dados(processed):
     )
 
     if candidatos_celulas:
+        # IMPORTANTE: a terceira leitura pode ter recuperado uma célula
+        # que estava vazia. O código anterior calculava isso, mas depois
+        # descartava o resultado e mesclava apenas ``resgate``.
+        # Agora a versão corrigida realmente entra na saída final.
         resultado["talhoes"] = _v17_mesclar_tabelas(
             existentes,
-            resgate,
+            candidatos_celulas,
         )
 
         bloco = (
