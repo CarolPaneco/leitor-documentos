@@ -8017,6 +8017,25 @@ def _v18_extrair_tabelas_grade(caminho):
         if bw_box > 250 and bh_box > 80 and bw_box < w_img * 0.70 and bh_box < h_img * 0.70 and (bw_box * bh_box) < (w_img * h_img * 0.35):
             tabelas_encontradas.append((bx, by, bw_box, bh_box))
 
+    # Reconstitui tabelas cujas bordas externas encostam na moldura da página
+    cell_boxes = []
+    for c in cnts:
+        bx, by, bw_box, bh_box = _cv2_v12.boundingRect(c)
+        if 50 < bw_box < 650 and 20 < bh_box < 85:
+            cell_boxes.append((bx, by, bw_box, bh_box))
+
+    if cell_boxes:
+        cell_mask = np.zeros((h_img, w_img), dtype=np.uint8)
+        for bx, by, bw_b, bh_b in cell_boxes:
+            cell_mask[by : by + bh_b, bx : bx + bw_b] = 255
+        k_connect = _cv2_v12.getStructuringElement(_cv2_v12.MORPH_RECT, (25, 15))
+        connected = _cv2_v12.morphologyEx(cell_mask, _cv2_v12.MORPH_CLOSE, k_connect)
+        merged_cnts, _ = _cv2_v12.findContours(connected, _cv2_v12.RETR_EXTERNAL, _cv2_v12.CHAIN_APPROX_SIMPLE)
+        for mc in merged_cnts:
+            bx, by, bw_b, bh_b = _cv2_v12.boundingRect(mc)
+            if bw_b > 250 and bh_b > 80 and bw_b < w_img * 0.70 and bh_b < h_img * 0.70 and (bw_b * bh_b) < (w_img * h_img * 0.35):
+                tabelas_encontradas.append((bx, by, bw_b, bh_b))
+
     # Desduplicação de caixas de contorno concêntricas ou sobrepostas (NMS com IoU real)
     tabelas_ordenadas = sorted(tabelas_encontradas, key=lambda b: b[2] * b[3], reverse=True)
     tabelas_desduplicadas = []
@@ -8180,10 +8199,14 @@ def _v18_extrair_tabelas_grade(caminho):
                 if clean_v and re.fullmatch(r"\d+(?:\.\d+)?", clean_v):
                     var_norm = ""
 
+                # Descarta se a variedade contiver unidades de medida ou metadados de rodapé
+                if any(k in var_norm.lower() for k in ["alq", "alqueire", "localiz", "status", "ha ou", "área", "area", "carreador", "descanso", "gestora"]):
+                    var_norm = ""
+
                 # Tratamento de células mescladas verticalmente ou talhão repetido:
                 # Importante: só herda ou combina se a linha tiver uma variedade legítima!
                 # Linha de total tem apenas a área total, sem variedade nem talhão.
-                if not talhao_num and (var_norm or v_txt):
+                if not talhao_num and var_norm:
                     if carry_talhao:
                         talhao_num = carry_talhao
                         carry_talhao = ""
