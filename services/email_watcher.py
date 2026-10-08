@@ -286,3 +286,4 @@ def loop_vigilante_email(intervalo_segundos=25):
         except Exception as e:
             print(f"[EMAIL WORKER] Erro no loop: {e}")
         time.sleep(intervalo_segundos)
+
