@@ -1083,6 +1083,20 @@ def arquivo_muito_grande(_erro):
 
 
 # ============================================================
+# VIGILANTE DE E-MAILS (AUTOMÁTICO)
+# ============================================================
+
+try:
+    import threading
+    from services.email_watcher import loop_vigilante_email
+    _email_thread = threading.Thread(target=loop_vigilante_email, args=(25,), daemon=True)
+    _email_thread.start()
+    print("[APP] Vigilante de e-mails iniciado em segundo plano!")
+except Exception as _e:
+    print(f"[APP] Falha ao iniciar vigilante de e-mail: {_e}")
+
+
+# ============================================================
 # INICIALIZAÇÃO
 # ============================================================
 
