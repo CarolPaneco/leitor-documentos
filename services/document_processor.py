@@ -21,7 +21,15 @@ import cv2
 import numpy as np
 import pymupdf
 import pytesseract
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+if os.name == "nt":
+    for _cmd in [
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "tesseract", "tesseract.exe"),
+    ]:
+        if os.path.exists(_cmd):
+            pytesseract.pytesseract.tesseract_cmd = _cmd
+            break
 
 from pytesseract import Output
 
