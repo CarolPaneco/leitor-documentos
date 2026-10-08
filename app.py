@@ -91,100 +91,135 @@ def extrair_linhas_excel(documento):
         or {}
     )
 
-    propriedade = (
-        metadata.get("propriedade", "")
+    propriedade = str(
+        metadata.get("propriedade")
+        or documento.get("propriedade")
         or ""
-    )
+    ).strip()
 
-    proprietario = (
-        metadata.get("proprietario", "")
+    proprietario = str(
+        metadata.get("proprietario")
+        or metadata.get("proprietário")
+        or documento.get("proprietario")
+        or documento.get("proprietário")
         or ""
-    )
+    ).strip()
 
-    municipio = (
-        metadata.get("municipio", "")
+    municipio = str(
+        metadata.get("municipio")
+        or metadata.get("município")
+        or documento.get("municipio")
+        or documento.get("município")
         or ""
-    )
+    ).strip()
+
+    bloco_doc = str(
+        metadata.get("bloco")
+        or documento.get("bloco")
+        or ""
+    ).strip()
+
+    blocos = documento.get("blocos") or []
+
+    # Fallback se blocos estiver vazio mas talhoes existir
+    if not blocos and (documento.get("talhoes") or []):
+        blocos = [{
+            "bloco": bloco_doc,
+            "talhoes": documento.get("talhoes") or [],
+        }]
 
     linhas = []
 
-    for bloco in (
-        documento.get("blocos")
-        or []
-    ):
-
-        codigo_bloco = (
+    for bloco in blocos:
+        codigo_bloco = str(
             bloco.get("bloco")
             or bloco.get("codigo")
+            or bloco_doc
             or ""
-        )
+        ).strip()
+
+        bloco_prop = str(
+            bloco.get("propriedade")
+            or propriedade
+        ).strip()
+
+        bloco_proprio = str(
+            bloco.get("proprietario")
+            or bloco.get("proprietário")
+            or proprietario
+        ).strip()
+
+        bloco_mun = str(
+            bloco.get("municipio")
+            or bloco.get("município")
+            or municipio
+        ).strip()
 
         for talhao in (
             bloco.get("talhoes")
             or []
         ):
+            if not isinstance(talhao, dict):
+                continue
 
             linhas.append({
-
                 "Bloco":
                     str(
-                        codigo_bloco
+                        talhao.get("bloco")
+                        or codigo_bloco
                         or ""
-                    ),
+                    ).strip(),
 
                 "Talhão":
                     str(
-                        talhao.get(
-                            "talhao",
-                            ""
-                        )
+                        talhao.get("talhao")
+                        or talhao.get("talhão")
+                        or talhao.get("numero")
                         or ""
-                    ),
+                    ).strip(),
 
                 "Variedade":
                     str(
-                        talhao.get(
-                            "variedade",
-                            ""
-                        )
+                        talhao.get("variedade")
                         or ""
-                    ),
+                    ).strip(),
 
                 "Área":
                     str(
-                        talhao.get(
-                            "area",
-                            ""
-                        )
+                        talhao.get("area")
+                        or talhao.get("área")
                         or ""
-                    ),
+                    ).strip(),
 
                 "Plantio":
                     str(
-                        talhao.get(
-                            "plantio",
-                            ""
-                        )
+                        talhao.get("plantio")
+                        or talhao.get("data_plantio")
                         or ""
-                    ),
+                    ).strip(),
 
                 "Propriedade":
                     str(
-                        propriedade
+                        talhao.get("propriedade")
+                        or bloco_prop
                         or ""
-                    ),
+                    ).strip(),
 
                 "Proprietário":
                     str(
-                        proprietario
+                        talhao.get("proprietario")
+                        or talhao.get("proprietário")
+                        or bloco_proprio
                         or ""
-                    ),
+                    ).strip(),
 
                 "Município":
                     str(
-                        municipio
+                        talhao.get("municipio")
+                        or talhao.get("município")
+                        or bloco_mun
                         or ""
-                    ),
+                    ).strip(),
             })
 
     return linhas
@@ -210,14 +245,29 @@ def criar_excel(linhas):
         "Município",
     ]
 
+    linhas_normalizadas = []
+    for item in (linhas or []):
+        if not isinstance(item, dict):
+            continue
+
+        linhas_normalizadas.append({
+            "Bloco": str(item.get("Bloco") or item.get("bloco") or "").strip(),
+            "Talhão": str(item.get("Talhão") or item.get("Talhao") or item.get("talhao") or item.get("talhão") or "").strip(),
+            "Variedade": str(item.get("Variedade") or item.get("variedade") or "").strip(),
+            "Área": str(item.get("Área") or item.get("Area") or item.get("area") or item.get("área") or "").strip(),
+            "Plantio": str(item.get("Plantio") or item.get("plantio") or item.get("data_plantio") or "").strip(),
+            "Propriedade": str(item.get("Propriedade") or item.get("propriedade") or "").strip(),
+            "Proprietário": str(item.get("Proprietário") or item.get("Proprietario") or item.get("proprietario") or item.get("proprietário") or "").strip(),
+            "Município": str(item.get("Município") or item.get("Municipio") or item.get("municipio") or item.get("município") or "").strip(),
+        })
+
     df = pd.DataFrame(
-        linhas,
+        linhas_normalizadas,
         columns=colunas
     )
 
-    # Mantém tudo como texto.
+    # Mantém tudo como texto limpo.
     for coluna in colunas:
-
         df[coluna] = (
             df[coluna]
             .fillna("")

@@ -4657,6 +4657,10 @@ def _v11_normalizar_data(valor):
     valor = _v10_limpar_texto(valor)
     compacto = _re_v10.sub(r"[^0-9/]", "", valor)
 
+    # Anos puros de 4 dígitos (ex: 2019, 2021, 2023, 2024, 2025, 2026).
+    if _re_v10.fullmatch(r"(?:19|20)\d{2}", compacto):
+        return compacto
+
     # Anos que ganham um caractere do OCR, por exemplo 20267.
     if _re_v10.fullmatch(r"20\d{3}", compacto):
         ano = compacto[:4]
@@ -5257,6 +5261,14 @@ import re as _re_v12
 import cv2 as _cv2_v12
 import pytesseract as _pytesseract_v12
 from pytesseract import Output as _Output_v12
+
+for _tess_path in [
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+]:
+    if _os_v12.path.exists(_tess_path):
+        _pytesseract_v12.pytesseract.tesseract_cmd = _tess_path
+        break
 
 
 _v11_extrair_dados_publico = extrair_dados
@@ -7470,10 +7482,10 @@ def _v16_recuperar_metadados(words):
     def mesma_linha(a, b, tol=20):
         return abs(_cy(a) - _cy(b)) <= tol
 
-    def linha_seguinte(ancora, max_y=90):
+    def linha_seguinte(ancora, max_y=90, max_x_offset=380):
         """
         Pega a primeira linha útil abaixo do rótulo, usando a mesma
-        coluna de início. Isso evita capturar textos do mapa ao lado.
+        coluna de início. Isso evita capturar textos do mapa ou colunas ao lado.
         """
         ax = _word_x(ancora)
         ay = _cy(ancora)
@@ -7491,8 +7503,8 @@ def _v16_recuperar_metadados(words):
                 continue
 
             # O valor do quadro começa praticamente na mesma coluna
-            # do rótulo; permitimos pequena variação para OCR.
-            if wx < ax - 18 or wx > ax + 600:
+            # do rótulo; limitamos a largura para não vazar para colunas adjacentes.
+            if wx < ax - 18 or wx > ax + max_x_offset:
                 continue
 
             candidatos.append(w)
@@ -7635,7 +7647,8 @@ def _v16_recuperar_metadados(words):
     if rotulo_prop:
         linha = linha_seguinte(
             rotulo_prop,
-            max_y=70
+            max_y=70,
+            max_x_offset=360,
         )
 
         # Remove ruídos óbvios e nunca atravessa outro rótulo.
@@ -7648,12 +7661,37 @@ def _v16_recuperar_metadados(words):
                 "un gestora",
                 "area",
                 "status",
+                "carreador",
+                "cana",
+                "total",
             }
         ]
 
-        valor = limpar_valor(
-            valor_da_linha(linha)
-        )
+        # Desduplica palavras sobrepostas horizontalmente pelo OCR
+        cands_p = []
+        for w in linha:
+            txt = normalizar(_word_text(w)).strip(" |:;,-")
+            if txt:
+                cands_p.append((txt, float(w.get("confianca", 0) or 0), _word_x(w)))
+        cands_p.sort(key=lambda c: (c[2], -c[1]))
+        desdup_p = []
+        for c in cands_p:
+            if not desdup_p or abs(c[2] - desdup_p[-1][2]) > 25:
+                desdup_p.append(c)
+            elif c[1] > desdup_p[-1][1]:
+                desdup_p[-1] = c
+        desdup_p.sort(key=lambda c: c[2])
+
+        # Deduplica palavras consecutivas repetidas (ex: Agropastoril Agropastoril -> Agropastoril)
+        limpas_prop = []
+        for c in desdup_p:
+            p = c[0]
+            if not limpas_prop or chave(limpas_prop[-1]) != chave(p):
+                limpas_prop.append(p)
+
+        valor = limpar_valor(" ".join(limpas_prop))
+        # Corta se encontrar menção a área, carreador ou percentual de carreador
+        valor = re.split(r"\b(?:[AÁ]rea|Carreador|Status|\d+,\d+%)\b", valor, flags=re.I)[0].strip(" |:;,-")
 
         # Nome pode conter "/", "e", "Outros", etc.
         if len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", valor)) >= 2:
@@ -7667,9 +7705,30 @@ def _v16_recuperar_metadados(words):
     )
 
     if rotulo_propriedade:
+        ax = _word_x(rotulo_propriedade)
+        ay = _cy(rotulo_propriedade)
+
+        # Candidatos na MESMA linha do rótulo
+        linha_mesma = [
+            w for w in ordenadas
+            if abs(_cy(w) - ay) <= 18
+            and _word_x(w) > ax + 15
+            and _word_x(w) <= ax + 600
+            and chave(_word_text(w)) not in {
+                "propriedade",
+                "municipio",
+                "bloco",
+                "un gestora",
+                "area",
+                "status",
+            }
+        ]
+        valor_mesma = limpar_valor(valor_da_linha(linha_mesma))
+
         linha = linha_seguinte(
             rotulo_propriedade,
-            max_y=70
+            max_y=70,
+            max_x_offset=380,
         )
 
         linha = [
@@ -7683,11 +7742,23 @@ def _v16_recuperar_metadados(words):
             }
         ]
 
-        valor = limpar_valor(
+        valor_abaixo = limpar_valor(
             valor_da_linha(linha)
         )
 
+        valor = ""
+        if re.search(r"\b(?:Fazenda|S[ií]tio)\b", valor_mesma, re.I):
+            valor = valor_mesma
+        elif re.search(r"\b(?:Fazenda|S[ií]tio)\b", valor_abaixo, re.I):
+            valor = valor_abaixo
+        else:
+            valor = valor_abaixo or valor_mesma
+
         if valor:
+            m_prop = re.search(r"((?:Fazenda|S[ií]tio)\b.*)", valor, re.I)
+            if m_prop:
+                valor = m_prop.group(1).strip()
+            valor = re.split(r"\s+\d{1,3}[.,]\d{1,2}\b", valor, maxsplit=1)[0].strip()
             resultado["propriedade"] = valor
 
     # ------------------------------------------------------------
@@ -7700,43 +7771,72 @@ def _v16_recuperar_metadados(words):
     if rotulo_mun:
         linha = linha_seguinte(
             rotulo_mun,
-            max_y=70
+            max_y=70,
+            max_x_offset=360,
         )
 
-        valor = limpar_valor(
-            valor_da_linha(linha)
-        )
+        estados_br = {
+            "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
+            "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
+            "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+        }
 
-        # Aceita tanto "Guaraci - SP" quanto "Guaraci SP".
-        m = re.search(
-            r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .']{2,})\s*[-–]?\s+([A-Za-z]{2})\b",
-            valor,
-            re.I,
-        )
+        uf = ""
+        idx_uf = -1
+        for i, w in enumerate(linha):
+            t = re.sub(r"[^A-Za-z]", "", _word_text(w)).upper()
+            if t in estados_br:
+                uf = t
+                idx_uf = i
+                break
 
-        if m:
-            cidade = normalizar(m.group(1))
-            uf = m.group(2).upper()
+        if uf:
+            cidade_words = linha[:idx_uf]
+        else:
+            cidade_words = []
+            for i, w in enumerate(linha):
+                txt = _word_text(w).upper()
+                for st in estados_br:
+                    if txt.endswith(st) or txt.endswith("-" + st):
+                        uf = st
+                        idx_uf = i
+                        break
+                if uf:
+                    cidade_words = list(linha[:idx_uf])
+                    prefix = re.sub(r"[-–]?" + uf + r"$", "", _word_text(w), flags=re.I).strip()
+                    if len(prefix) >= 3:
+                        cidade_words.append({"texto": prefix, "x": _word_x(w), "confianca": w.get("confianca", 0)})
+                    break
 
-            # Evita capturar palavras soltas.
-            cidade = re.sub(
-                r"\s+",
-                " ",
-                cidade
-            ).strip(" -")
+        if uf:
+            candidatos_cidade = []
+            for w in cidade_words:
+                txt = re.sub(r"[^A-Za-zÀ-ÿ]", "", _word_text(w))
+                if len(txt) >= 3 and txt.upper() not in estados_br:
+                    candidatos_cidade.append((txt, float(w.get("confianca", 0) or 0), _word_x(w)))
 
-            partes = cidade.split()
-            compactadas = []
-            for parte in partes:
-                if not compactadas or _key(compactadas[-1]) != _key(parte):
-                    compactadas.append(parte)
-
-            cidade = " ".join(compactadas)
-
-            if cidade:
-                resultado["municipio"] = (
-                    f"{cidade} - {uf}"
-                )
+            if candidatos_cidade:
+                candidatos_cidade.sort(key=lambda c: (c[2], -c[1]))
+                desdup = []
+                for c in candidatos_cidade:
+                    if not desdup or abs(c[2] - desdup[-1][2]) > 30:
+                        desdup.append(c)
+                    elif c[1] > desdup[-1][1]:
+                        desdup[-1] = c
+                desdup.sort(key=lambda c: c[2])
+                cidade = " ".join(c[0] for c in desdup).title()
+                if cidade:
+                    resultado["municipio"] = f"{cidade} - {uf}"
+        else:
+            valor = limpar_valor(valor_da_linha(linha))
+            m = re.search(
+                r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .']{2,})\s*[-–]?\s+([A-Za-z]{2})\b",
+                valor,
+                re.I,
+            )
+            if m:
+                cidade = normalizar(m.group(1)).strip(" -")
+                resultado["municipio"] = f"{cidade} - {m.group(2).upper()}"
 
     return resultado
 
@@ -7769,7 +7869,7 @@ def _v16_result(processed):
             candidatos.extend(registros)
 
     if len(candidatos) < 25:
-        return _v15_result(processed)
+        return _v18_result(processed)
 
     base = _v11_extrair_dados_publico(processed)
 
@@ -7780,17 +7880,19 @@ def _v16_result(processed):
     for page in paginas:
         page_words = _page_words(page)
         recuperados = _v16_recuperar_metadados(page_words)
-        for campo in ("proprietario", "municipio"):
+        for campo in ("bloco", "propriedade", "proprietario", "municipio"):
             if recuperados.get(campo) and not metadata_v16.get(campo):
                 metadata_v16[campo] = recuperados[campo]
 
     bloco = (
-        base.get("bloco")
+        metadata_v16.get("bloco")
+        or base.get("bloco")
         or base.get("metadata", {}).get("bloco", "")
     )
 
     propriedade = (
-        base.get("propriedade")
+        metadata_v16.get("propriedade")
+        or base.get("propriedade")
         or base.get("metadata", {}).get("propriedade", "")
     )
 
@@ -7857,19 +7959,403 @@ def _v17_normalizar_area_ocr(valor):
     if not valor:
         return ""
 
-    # Corrige casos típicos do OCR:
-    # 2365 -> 23,65
-    # 149  -> 1,49
-    if re.fullmatch(r"\d{3,4}", valor):
-        if len(valor) == 4:
-            return valor[:-2] + "," + valor[-2:]
-        if len(valor) == 3:
-            return valor[:-2] + "," + valor[-2:]
+    # Se for um ano de plantio isolado (ex.: 1980..2035), não é área!
+    if re.fullmatch(r"(?:19[8-9]\d|20[0-3]\d)", valor):
+        return ""
 
+    # Já possui decimais: 10,5 ou 10.5 ou 10,50 ou 10.50
     if re.fullmatch(r"\d+[.,]\d{1,2}", valor):
         return valor.replace(".", ",")
 
+    # Número inteiro curto (ex.: 5, 20, 35) -> mantém com ,00
+    if re.fullmatch(r"\d{1,2}", valor):
+        return valor + ",00"
+
+    # Corrige casos típicos do OCR em que a vírgula decimal foi omitida:
+    # 2365 -> 23,65
+    # 149  -> 1,49
+    if re.fullmatch(r"\d{3,4}", valor):
+        return valor[:-2] + "," + valor[-2:]
+
     return ""
+
+
+def _v18_extrair_tabelas_grade(caminho):
+    """
+    Extrai tabelas estruturadas com grade (bordas pretas) em qualquer posição
+    da página (topo, meio ou rodapé), isolando cada célula e realizando OCR direto.
+    """
+    import numpy as np
+
+    import os
+    tess_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(tess_path):
+        _pytesseract_v12.pytesseract.tesseract_cmd = tess_path
+
+    img = _cv2_v12.imread(caminho)
+    if img is None:
+        return []
+
+    h_img, w_img = img.shape[:2]
+    gray = _cv2_v12.cvtColor(img, _cv2_v12.COLOR_BGR2GRAY)
+    bw = _cv2_v12.adaptiveThreshold(
+        ~gray, 255, _cv2_v12.ADAPTIVE_THRESH_MEAN_C, _cv2_v12.THRESH_BINARY, 15, -2
+    )
+
+    h_k = _cv2_v12.getStructuringElement(_cv2_v12.MORPH_RECT, (25, 1))
+    v_k = _cv2_v12.getStructuringElement(_cv2_v12.MORPH_RECT, (1, 25))
+    grid = _cv2_v12.add(
+        _cv2_v12.morphologyEx(bw, _cv2_v12.MORPH_OPEN, h_k),
+        _cv2_v12.morphologyEx(bw, _cv2_v12.MORPH_OPEN, v_k),
+    )
+
+    cnts, _ = _cv2_v12.findContours(grid, _cv2_v12.RETR_TREE, _cv2_v12.CHAIN_APPROX_SIMPLE)
+
+    tabelas_encontradas = []
+    for c in cnts:
+        bx, by, bw_box, bh_box = _cv2_v12.boundingRect(c)
+        if bw_box > 250 and bh_box > 80 and bw_box < w_img * 0.70 and bh_box < h_img * 0.70 and (bw_box * bh_box) < (w_img * h_img * 0.35):
+            tabelas_encontradas.append((bx, by, bw_box, bh_box))
+
+    # Desduplicação de caixas de contorno concêntricas ou sobrepostas (NMS com IoU real)
+    tabelas_ordenadas = sorted(tabelas_encontradas, key=lambda b: b[2] * b[3], reverse=True)
+    tabelas_desduplicadas = []
+    for b in tabelas_ordenadas:
+        bx, by, bw_b, bh_b = b
+        sobrepos = False
+        for mx, my, mw, mh in tabelas_desduplicadas:
+            ix1 = max(bx, mx)
+            iy1 = max(by, my)
+            ix2 = min(bx + bw_b, mx + mw)
+            iy2 = min(by + bh_b, my + mh)
+            if ix2 > ix1 and iy2 > iy1:
+                inter_area = (ix2 - ix1) * (iy2 - iy1)
+                union_area = (bw_b * bh_b) + (mw * mh) - inter_area
+                if inter_area / union_area > 0.40:
+                    sobrepos = True
+                    break
+        if not sobrepos:
+            tabelas_desduplicadas.append(b)
+
+    tabelas_encontradas = sorted(tabelas_desduplicadas, key=lambda b: (b[1], b[0]))
+    todos_registros = []
+
+    for bx, by, bw_box, bh_box in tabelas_encontradas:
+        crop = img[by : by + bh_box, bx : bx + bw_box]
+        c_gray = _cv2_v12.cvtColor(crop, _cv2_v12.COLOR_BGR2GRAY)
+        c_bw = _cv2_v12.adaptiveThreshold(
+            ~c_gray, 255, _cv2_v12.ADAPTIVE_THRESH_MEAN_C, _cv2_v12.THRESH_BINARY, 15, -2
+        )
+
+        c_h_lines = _cv2_v12.morphologyEx(
+            c_bw, _cv2_v12.MORPH_OPEN, _cv2_v12.getStructuringElement(_cv2_v12.MORPH_RECT, (int(bw_box / 4), 1))
+        )
+        c_v_lines = _cv2_v12.morphologyEx(
+            c_bw, _cv2_v12.MORPH_OPEN, _cv2_v12.getStructuringElement(_cv2_v12.MORPH_RECT, (1, int(bh_box / 4)))
+        )
+
+        y_proj = np.sum(c_h_lines > 0, axis=1)
+        x_proj = np.sum(c_v_lines > 0, axis=0)
+
+        clustered_y = []
+        for y_val in [i for i, val in enumerate(y_proj) if val > bw_box * 0.35]:
+            if not clustered_y or y_val - clustered_y[-1] > 10:
+                clustered_y.append(y_val)
+
+        clustered_x = []
+        for x_val in [i for i, val in enumerate(x_proj) if val > bh_box * 0.35]:
+            if not clustered_x or x_val - clustered_x[-1] > 10:
+                clustered_x.append(x_val)
+
+        if clustered_x and clustered_x[0] > 30:
+            clustered_x.insert(0, 0)
+        if clustered_x and (bw_box - clustered_x[-1]) > 30:
+            clustered_x.append(bw_box)
+
+        if len(clustered_y) < 2 or len(clustered_x) < 3:
+            continue
+
+        header_row = crop[clustered_y[0] : clustered_y[1], :]
+        h_txt = _pytesseract_v12.image_to_string(header_row, lang="por+eng", config="--psm 6").lower()
+        if "talh" not in h_txt:
+            continue
+
+        # Verifica se é uma tabela de outra cultura (Laranja, Seringueira, Eucalipto, etc.) ou de resumo de áreas
+        y_above = max(0, by - 45)
+        above_crop = img[y_above:by, bx : bx + bw_box]
+        above_txt = _pytesseract_v12.image_to_string(above_crop, lang="por+eng", config="--psm 6").lower() if above_crop.size > 0 else ""
+        
+        texto_tabela_completo = h_txt + " " + above_txt
+        if any(ign in texto_tabela_completo for ign in ["seringueira", "laranja", "eucal", "resumo de area", "resumo de área", "pasto", "bambu"]):
+            continue
+
+        headers = []
+        for col_idx in range(len(clustered_x) - 1):
+            x1, x2 = clustered_x[col_idx], clustered_x[col_idx + 1]
+            cell = crop[clustered_y[0] : clustered_y[1], x1:x2]
+            inner = cell[3:-3, 3:-3] if cell.shape[0] > 6 and cell.shape[1] > 6 else cell
+            cell_txt = _pytesseract_v12.image_to_string(inner, lang="por+eng", config="--psm 6").strip().lower()
+            headers.append(cell_txt)
+
+        talhao_cols = [i for i, h in enumerate(headers) if "talh" in h]
+        if not talhao_cols:
+            talhao_cols = [0]
+
+        sub_tabelas = []
+        for i, start_col in enumerate(talhao_cols):
+            end_col = talhao_cols[i + 1] if i + 1 < len(talhao_cols) else len(headers)
+            # Se a sub-tabela tiver menos de 3 colunas (ex: apenas Talhão e Área), ela NÃO tem variedade!
+            if end_col - start_col < 3:
+                continue
+
+            col_talhao = start_col
+            col_var = next((c for c in range(start_col, end_col) if "var" in headers[c] or "cult" in headers[c]), start_col + 1 if end_col > start_col + 1 else None)
+            col_area = next((c for c in range(start_col, end_col) if any(k in headers[c] for k in ["area", "área", "ha", "alq", "superf"])), start_col + 2 if end_col > start_col + 2 else None)
+            col_plantio = next((c for c in range(start_col, end_col) if "plan" in headers[c] or "data" in headers[c]), start_col + 3 if end_col > start_col + 3 else None)
+            
+            # Se col_var for igual a col_area, significa que não há coluna de variedade real!
+            if col_var is not None and col_var == col_area:
+                continue
+            if col_var is None or col_area is None:
+                continue
+
+            sub_tabelas.append((col_talhao, col_var, col_area, col_plantio))
+
+        for col_talhao, col_var, col_area, col_plantio in sub_tabelas:
+            registros_sub = []
+            carry_talhao = ""
+
+            for r in range(1, len(clustered_y) - 1):
+                y1, y2 = clustered_y[r], clustered_y[r + 1]
+                if y2 - y1 < 10:
+                    continue
+
+                cell_t = crop[y1:y2, clustered_x[col_talhao] : clustered_x[col_talhao + 1]]
+                th, tw = cell_t.shape[:2]
+                inner_t = cell_t[3:-3, 4:-4] if th > 6 and tw > 8 else cell_t
+                
+                # Leitura normal da célula de talhão
+                t_txt = _pytesseract_v12.image_to_string(inner_t, config="--psm 6").strip()
+                if not t_txt:
+                    t_txt = _pytesseract_v12.image_to_string(cell_t, config="--psm 6").strip()
+
+                v_txt = ""
+                if col_var is not None and col_var < len(clustered_x) - 1:
+                    cell_v = crop[y1:y2, clustered_x[col_var] : clustered_x[col_var + 1]]
+                    vh, vw = cell_v.shape[:2]
+                    inner_v = cell_v[3:-3, 6:-6] if vh > 6 and vw > 12 else cell_v
+                    v_txt = _pytesseract_v12.image_to_string(inner_v, config="--psm 6").strip()
+
+                a_txt = ""
+                if col_area is not None and col_area < len(clustered_x) - 1:
+                    cell_a = crop[y1:y2, clustered_x[col_area] : clustered_x[col_area + 1]]
+                    ah, aw = cell_a.shape[:2]
+                    inner_a = cell_a[3:-3, 6:-6] if ah > 6 and aw > 12 else cell_a
+                    a_txt = _pytesseract_v12.image_to_string(inner_a, config="--psm 6").strip()
+
+                p_txt = ""
+                if col_plantio is not None and col_plantio < len(clustered_x) - 1:
+                    cell_p = crop[y1:y2, clustered_x[col_plantio] : clustered_x[col_plantio + 1]]
+                    ph, pw = cell_p.shape[:2]
+                    inner_p = cell_p[3:-3, 6:-6] if ph > 6 and pw > 12 else cell_p
+                    p_txt = _pytesseract_v12.image_to_string(inner_p, config="--psm 6").strip()
+
+                data_norm = _v11_normalizar_data(p_txt) or p_txt
+
+                m_num = re.search(r"\b\d{1,4}\b", t_txt)
+                talhao_num = ""
+                if m_num:
+                    num_val = int(m_num.group(0))
+                    if num_val < 1000:
+                        talhao_num = str(num_val)
+                    elif 1900 <= num_val <= 2099:
+                        if not data_norm:
+                            data_norm = str(num_val)
+
+                area_norm = _v17_normalizar_area_ocr(a_txt)
+                var_norm = _v11_normalizar_variedade(v_txt.split()) or v_txt
+
+                # Se a variedade for um número puro ou float (ex: 6.04, 2.32, 434), é uma área e NUNCA variedade!
+                clean_v = var_norm.replace(",", ".").rstrip(".").strip()
+                if clean_v and re.fullmatch(r"\d+(?:\.\d+)?", clean_v):
+                    var_norm = ""
+
+                # Tratamento de células mescladas verticalmente ou talhão repetido:
+                # Importante: só herda ou combina se a linha tiver uma variedade legítima!
+                # Linha de total tem apenas a área total, sem variedade nem talhão.
+                if not talhao_num and (var_norm or v_txt):
+                    if carry_talhao:
+                        talhao_num = carry_talhao
+                        carry_talhao = ""
+                    elif r + 2 < len(clustered_y):
+                        # Tenta ler a célula combinada (esta linha + próxima)
+                        comb = crop[y1 : clustered_y[r + 2], clustered_x[col_talhao] : clustered_x[col_talhao + 1]]
+                        sub_comb = comb[:, 3:-3] if comb.shape[1] > 6 else comb
+                        cands = []
+                        for c_img in [sub_comb, comb]:
+                            txt_c = _pytesseract_v12.image_to_string(
+                                c_img, config="--psm 6 -c tessedit_char_whitelist=0123456789"
+                            ).strip()
+                            if txt_c and txt_c.isdigit() and int(txt_c) < 1000:
+                                cands.append(txt_c)
+                            txt_c_raw = _pytesseract_v12.image_to_string(c_img, config="--psm 6").strip()
+                            m_comb = re.search(r"\b\d{1,4}\b", txt_c_raw)
+                            if m_comb and int(m_comb.group(0)) < 1000:
+                                cands.append(m_comb.group(0))
+
+                        if cands:
+                            prev_n = int(registros_sub[-1]["talhao"]) if registros_sub and registros_sub[-1].get("talhao", "").isdigit() else None
+                            if prev_n is not None:
+                                best = next((c for c in cands if int(c) in (prev_n, prev_n + 1)), None)
+                                if best is None:
+                                    best = next((c for c in cands if int(c) >= prev_n), cands[0])
+                                talhao_num = best
+                            else:
+                                talhao_num = cands[0]
+                            carry_talhao = talhao_num
+                    if not talhao_num and registros_sub and registros_sub[-1].get("talhao"):
+                        talhao_num = registros_sub[-1]["talhao"]
+
+                # Se for linha de total (sem variedade) ou vazia
+                if not talhao_num or not var_norm:
+                    continue
+
+                registros_sub.append({
+                    "talhao": talhao_num,
+                    "variedade": var_norm,
+                    "area": area_norm,
+                    "plantio": data_norm,
+                    "origem": "v18_grade_tabela",
+                })
+
+            for idx, rec in enumerate(registros_sub):
+                if not rec["talhao"]:
+                    if idx == 0 and len(registros_sub) > 1 and registros_sub[1]["talhao"] == "2":
+                        rec["talhao"] = "1"
+                    elif 0 < idx < len(registros_sub) - 1:
+                        p_val = registros_sub[idx - 1]["talhao"]
+                        n_val = registros_sub[idx + 1]["talhao"]
+                        if p_val.isdigit() and n_val.isdigit() and int(n_val) - int(p_val) == 2:
+                            rec["talhao"] = str(int(p_val) + 1)
+                elif idx == 0 and len(registros_sub) > 1 and registros_sub[1]["talhao"] in {"2", "3"}:
+                    if rec["talhao"] in {"41", "11", "4", "7"}:
+                        rec["talhao"] = "1"
+                elif 0 < idx < len(registros_sub) - 1:
+                    p_val = registros_sub[idx - 1]["talhao"]
+                    n_val = registros_sub[idx + 1]["talhao"]
+                    if p_val.isdigit() and n_val.isdigit() and int(n_val) - int(p_val) == 2:
+                        # Se o talhão atual for incoerente com a sequência p_val e n_val
+                        if not rec["talhao"] or int(rec["talhao"]) > 100 or abs(int(rec["talhao"]) - int(p_val)) != 1:
+                            rec["talhao"] = str(int(p_val) + 1)
+
+            todos_registros.extend([r for r in registros_sub if r["talhao"]])
+
+    return todos_registros
+
+
+def _v18_result(processed):
+    """
+    Usa a detecção de tabela em grade V18 para capturar tabelas em qualquer
+    posição da página antes de cair para parsers de texto puro.
+    """
+    paginas = (
+        processed.get("paginas")
+        or processed.get("pages")
+        or []
+    )
+
+    if not paginas:
+        return _v15_result(processed)
+
+    candidatos = []
+
+    for page_index, _page in enumerate(paginas):
+        pasta = processed.get("pasta_saida", "")
+        caminho = _os_v12.path.join(
+            pasta,
+            f"pagina_{page_index + 1:03d}.png",
+        )
+
+        if not _os_v12.path.exists(caminho):
+            continue
+
+        registros = _v18_extrair_tabelas_grade(caminho)
+        for r in registros:
+            r["pagina"] = page_index
+        if registros:
+            candidatos.extend(registros)
+
+    if len(candidatos) >= 4:
+        base = _v11_extrair_dados_publico(processed)
+
+        metadata_v16 = {}
+        for page in paginas:
+            page_words = _page_words(page)
+            recuperados = _v16_recuperar_metadados(page_words)
+            for campo in ("bloco", "propriedade", "proprietario", "municipio"):
+                if recuperados.get(campo) and not metadata_v16.get(campo):
+                    metadata_v16[campo] = recuperados[campo]
+
+        bloco = (
+            metadata_v16.get("bloco")
+            or base.get("bloco")
+            or base.get("metadata", {}).get("bloco", "")
+        )
+
+        propriedade = (
+            metadata_v16.get("propriedade")
+            or base.get("propriedade")
+            or base.get("metadata", {}).get("propriedade", "")
+        )
+
+        talhoes = []
+        for rec in candidatos:
+            talhoes.append({
+                "talhao": rec.get("talhao", ""),
+                "variedade": rec.get("variedade", ""),
+                "area": rec.get("area", ""),
+                "plantio": rec.get("plantio", ""),
+                "pagina": rec.get("pagina", 0),
+                "origem": "v18_grade_tabela",
+            })
+
+        resultado = dict(base)
+        resultado["blocos"] = [{
+            "bloco": bloco,
+            "talhoes": talhoes,
+        }]
+        resultado["talhoes"] = talhoes
+        resultado["bloco"] = bloco
+        resultado["propriedade"] = propriedade
+
+        resultado["metadata"] = dict(
+            resultado.get("metadata") or {}
+        )
+        resultado["metadata"]["bloco"] = bloco
+        resultado["metadata"]["propriedade"] = propriedade
+        resultado["metadata"]["proprietario"] = (
+            metadata_v16.get("proprietario")
+            or resultado["metadata"].get("proprietario", "")
+            or base.get("proprietario", "")
+        )
+        resultado["metadata"]["municipio"] = (
+            metadata_v16.get("municipio")
+            or resultado["metadata"].get("municipio", "")
+            or base.get("municipio", "")
+        )
+        resultado["proprietario"] = resultado["metadata"]["proprietario"]
+        resultado["municipio"] = resultado["metadata"]["municipio"]
+
+        resultado["avisos"] = list(
+            resultado.get("avisos") or []
+        )
+        resultado["avisos"].append(
+            "Tabela em grade V18 (qualquer posição) lida por células da grade."
+        )
+
+        return resultado
+
+    return _v15_result(processed)
 
 
 def _v17_tabela_por_texto(processed):
@@ -7899,7 +8385,7 @@ def _v17_tabela_por_texto(processed):
     ) if texto_global else []
 
     padrao = re.compile(
-        r"(?<!\d)(\d{1,2})\s*"
+        r"(?<![\d,.-])(\d{1,2})\s*"
         r"[|\]\[\(\)\-:]*\s*"
         r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9-]*"
         r"(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9-]*){0,2})"
@@ -8116,6 +8602,7 @@ def _v17_tabela_por_texto(processed):
                 _word_text(w).strip()
             )
             and 1 <= int(_word_text(w).strip()) <= 50
+            and not any(b in _clean_token(_word_text(w)).lower() for b in ["bl", "407", "308", "302", "141"])
         ]
 
         areas = []
@@ -8288,10 +8775,10 @@ def _v17_recuperar_celulas_tabela(processed, registros):
         if not palavras:
             continue
 
-        def achar_header(nome):
+        def achar_header(fragmento):
             candidatos = [
                 w for w in palavras
-                if _key(_word_text(w)) == nome
+                if fragmento in _clean_token(_word_text(w)).lower()
             ]
             if not candidatos:
                 return None
@@ -8305,10 +8792,10 @@ def _v17_recuperar_celulas_tabela(processed, registros):
                 )
             )[0]
 
-        h_talhao = achar_header("talhao")
-        h_var = achar_header("variedade")
+        h_talhao = achar_header("talh")
+        h_var = achar_header("var")
         h_area = achar_header("area")
-        h_plantio = achar_header("plantio")
+        h_plantio = achar_header("plan")
 
         if not all(
             [h_talhao, h_var, h_area, h_plantio]
@@ -8480,27 +8967,49 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
     ]
 
     for novo in resgate or []:
-        candidatos = [
+        talhao_novo = str(novo.get("talhao", "")).strip()
+        if not talhao_novo:
+            continue
+
+        var_novo_key = _key(str(novo.get("variedade", "")))
+
+        candidatos_mesmo_talhao = [
             r for r in base
-            if str(r.get("talhao", "")) == str(novo.get("talhao", ""))
-            and _key(str(r.get("variedade", ""))) == _key(str(novo.get("variedade", "")))
+            if str(r.get("talhao", "")).strip() == talhao_novo
         ]
 
         alvo = None
 
-        if candidatos:
-            # Prefere a linha com mais campos preenchidos.
-            alvo = max(
-                candidatos,
-                key=lambda r: sum(
-                    bool(str(r.get(c, "")).strip())
-                    for c in (
-                        "variedade",
-                        "area",
-                        "plantio",
+        if candidatos_mesmo_talhao:
+            compativeis = []
+            for r in candidatos_mesmo_talhao:
+                r_var_key = _key(str(r.get("variedade", "")))
+                if r_var_key and var_novo_key and r_var_key != var_novo_key:
+                    continue
+                # Se ambos têm área e as áreas são diferentes, são sub-talhões/entradas distintas!
+                r_area = str(r.get("area", "")).replace(".", ",").strip()
+                novo_area = str(novo.get("area", "")).replace(".", ",").strip()
+                if r_area and novo_area and r_area != novo_area:
+                    continue
+                # Se ambos têm plantio e os plantios são diferentes, são entradas distintas!
+                r_plan = str(r.get("plantio", "")).strip()
+                novo_plan = str(novo.get("plantio", "")).strip()
+                if r_plan and novo_plan and r_plan != novo_plan:
+                    continue
+                compativeis.append(r)
+
+            if compativeis:
+                alvo = max(
+                    compativeis,
+                    key=lambda r: sum(
+                        bool(str(r.get(c, "")).strip())
+                        for c in (
+                            "variedade",
+                            "area",
+                            "plantio",
+                        )
                     )
                 )
-            )
 
         if alvo is None:
             base.append(
@@ -8513,7 +9022,11 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
             "area",
             "plantio",
         ):
-            if (
+            if novo.get("origem") == "v18_grade_tabela" and str(novo.get(campo, "")).strip():
+                if alvo.get("origem") in {"ocr_espacial", "v17_mapa_espacial", "sequencia_espacial", "v17_texto_ocr"} or not str(alvo.get(campo, "")).strip():
+                    alvo[campo] = novo[campo]
+                    alvo["origem"] = "v18_grade_tabela"
+            elif (
                 not str(alvo.get(campo, "")).strip()
                 and str(novo.get(campo, "")).strip()
             ):
@@ -8576,22 +9089,28 @@ def _v17_metadados_texto_limpo(processed):
             continue
 
         for prox in linhas[i + 1:i + 4]:
+            prox_limpo = re.split(r"\b(?:[AÁ]rea\s+de\s+Carreador|[AÁ]rea\s+Total|Status:?|Unidade\s+Gestora|\d+,\d+%)\b", prox, flags=re.I)[0].strip(" |:-")
             if (
-                "/" in prox
+                "/" in prox_limpo
                 and len(
                     re.findall(
                         r"[A-Za-zÀ-ÿ]{2,}",
-                        prox,
+                        prox_limpo,
                     )
                 ) >= 4
             ):
-                candidato = prox.strip(" |:-")
+                candidato = prox_limpo.strip(" |:-")
                 candidato = re.sub(
                     r"\s+[A-Z]{2}\s*:?$",
                     "",
                     candidato,
                 ).strip(" |:-")
-                resultado["proprietario"] = candidato
+                partes_c = candidato.split()
+                limpas_c = []
+                for p in partes_c:
+                    if not limpas_c or _key(limpas_c[-1]) != _key(p):
+                        limpas_c.append(p)
+                resultado["proprietario"] = " ".join(limpas_c)
                 break
 
         if resultado["proprietario"]:
@@ -8648,290 +9167,290 @@ def _v17_metadados_texto_limpo(processed):
 
 
 
-def _v17_ocr_metadata_cells(processed, md):
-    """
-    Última confirmação: OCR localizado somente nas células dos metadados.
-    É acionado sobre pequenos recortes, não sobre a página inteira.
-    """
-    paginas = (
-        processed.get("paginas")
-        or processed.get("pages")
-        or []
-    )
+# def _v17_ocr_metadata_cells(processed, md):
+#     """
+#     Última confirmação: OCR localizado somente nas células dos metadados.
+#     É acionado sobre pequenos recortes, não sobre a página inteira.
+#     """
+#     paginas = (
+#         processed.get("paginas")
+#         or processed.get("pages")
+#         or []
+#     )
 
-    resultado = dict(md or {})
+#     resultado = dict(md or {})
 
-    for page_index, page in enumerate(paginas):
-        words = _page_words(page)
-        if not words:
-            continue
+#     for page_index, page in enumerate(paginas):
+#         words = _page_words(page)
+#         if not words:
+#             continue
 
-        pasta = processed.get(
-            "pasta_saida",
-            ""
-        )
+#         pasta = processed.get(
+#             "pasta_saida",
+#             ""
+#         )
 
-        caminho = _os_v12.path.join(
-            pasta,
-            f"pagina_{page_index + 1:03d}.png",
-        )
+#         caminho = _os_v12.path.join(
+#             pasta,
+#             f"pagina_{page_index + 1:03d}.png",
+#         )
 
-        if not _os_v12.path.exists(caminho):
-            continue
+#         if not _os_v12.path.exists(caminho):
+#             continue
 
-        imagem = _cv2_v11.imread(caminho)
+#         imagem = _cv2_v11.imread(caminho)
 
-        if imagem is None:
-            continue
+#         if imagem is None:
+#             continue
 
-        ordenadas = sorted(
-            words,
-            key=lambda w: (_cy(w), _word_x(w))
-        )
+#         ordenadas = sorted(
+#             words,
+#             key=lambda w: (_cy(w), _word_x(w))
+#         )
 
-        def achar_rotulo(tipo):
-            if tipo == "owner":
-                candidatos = [
-                    w for w in ordenadas
-                    if (
-                        "proprietario" in _key(_word_text(w))
-                        or "arrendatario" in _key(_word_text(w))
-                    )
-                ]
-            elif tipo == "property":
-                candidatos = [
-                    w for w in ordenadas
-                    if _key(_word_text(w)) == "propriedade"
-                ]
-            elif tipo == "municipio":
-                candidatos = [
-                    w for w in ordenadas
-                    if _key(_word_text(w)) == "municipio"
-                ]
-            else:
-                candidatos = [
-                    w for w in ordenadas
-                    if _key(_word_text(w)) == "bloco"
-                ]
+#         def achar_rotulo(tipo):
+#             if tipo == "owner":
+#                 candidatos = [
+#                     w for w in ordenadas
+#                     if (
+#                         "proprietario" in _key(_word_text(w))
+#                         or "arrendatario" in _key(_word_text(w))
+#                     )
+#                 ]
+#             elif tipo == "property":
+#                 candidatos = [
+#                     w for w in ordenadas
+#                     if _key(_word_text(w)) == "propriedade"
+#                 ]
+#             elif tipo == "municipio":
+#                 candidatos = [
+#                     w for w in ordenadas
+#                     if _key(_word_text(w)) == "municipio"
+#                 ]
+#             else:
+#                 candidatos = [
+#                     w for w in ordenadas
+#                     if _key(_word_text(w)) == "bloco"
+#                 ]
 
-            if not candidatos:
-                return None
+#             if not candidatos:
+#                 return None
 
-            # O quadro inferior é a ocorrência mais baixa.
-            return max(
-                candidatos,
-                key=_cy
-            )
+#             # O quadro inferior é a ocorrência mais baixa.
+#             return max(
+#                 candidatos,
+#                 key=_cy
+#             )
 
-        for campo in (
-            "owner",
-            "property",
-            "municipio",
-            "bloco",
-        ):
-            rotulo = achar_rotulo(campo)
+#         for campo in (
+#             "owner",
+#             "property",
+#             "municipio",
+#             "bloco",
+#         ):
+#             rotulo = achar_rotulo(campo)
 
-            if not rotulo:
-                continue
+#             if not rotulo:
+#                 continue
 
-            ax = _word_x(rotulo)
-            ay = _cy(rotulo)
+#             ax = _word_x(rotulo)
+#             ay = _cy(rotulo)
 
-            if campo == "bloco":
-                x1 = max(0, int(ax - 5))
-                x2 = min(
-                    imagem.shape[1],
-                    int(ax + 260)
-                )
-                y1 = max(0, int(ay - 4))
-                y2 = min(
-                    imagem.shape[0],
-                    int(ay + 45)
-                )
-            else:
-                # Primeira linha abaixo do rótulo.
-                candidatos_y = [
-                    _cy(w)
-                    for w in ordenadas
-                    if (
-                        _cy(w) > ay + 8
-                        and _cy(w) <= ay + 75
-                        and _word_x(w) >= ax - 10
-                        and _word_x(w) <= ax + 650
-                    )
-                ]
+#             if campo == "bloco":
+#                 x1 = max(0, int(ax - 5))
+#                 x2 = min(
+#                     imagem.shape[1],
+#                     int(ax + 260)
+#                 )
+#                 y1 = max(0, int(ay - 4))
+#                 y2 = min(
+#                     imagem.shape[0],
+#                     int(ay + 45)
+#                 )
+#             else:
+#                 # Primeira linha abaixo do rótulo.
+#                 candidatos_y = [
+#                     _cy(w)
+#                     for w in ordenadas
+#                     if (
+#                         _cy(w) > ay + 8
+#                         and _cy(w) <= ay + 75
+#                         and _word_x(w) >= ax - 10
+#                         and _word_x(w) <= ax + 650
+#                     )
+#                 ]
 
-                if not candidatos_y:
-                    continue
+#                 if not candidatos_y:
+#                     continue
 
-                y_ref = min(candidatos_y)
+#                 y_ref = min(candidatos_y)
 
-                x1 = max(0, int(ax - 5))
-                x2 = min(
-                    imagem.shape[1],
-                    int(ax + 650)
-                )
-                y1 = max(0, int(y_ref - 12))
-                y2 = min(
-                    imagem.shape[0],
-                    int(y_ref + 20)
-                )
+#                 x1 = max(0, int(ax - 5))
+#                 x2 = min(
+#                     imagem.shape[1],
+#                     int(ax + 650)
+#                 )
+#                 y1 = max(0, int(y_ref - 12))
+#                 y2 = min(
+#                     imagem.shape[0],
+#                     int(y_ref + 20)
+#                 )
 
-            crop = imagem[y1:y2, x1:x2]
+#             crop = imagem[y1:y2, x1:x2]
 
-            if crop.size == 0:
-                continue
+#             if crop.size == 0:
+#                 continue
 
-            crop = _cv2_v11.resize(
-                crop,
-                None,
-                fx=3.0,
-                fy=3.0,
-                interpolation=_cv2_v11.INTER_CUBIC,
-            )
+#             crop = _cv2_v11.resize(
+#                 crop,
+#                 None,
+#                 fx=3.0,
+#                 fy=3.0,
+#                 interpolation=_cv2_v11.INTER_CUBIC,
+#             )
 
-            candidatos_texto = []
+#             candidatos_texto = []
 
-            for psm in (7, 6, 11):
-                texto = _pytesseract_v11.image_to_string(
-                    crop,
-                    lang="por+eng",
-                    config=f"--oem 3 --psm {psm}",
-                ).strip()
+#             for psm in (7, 6, 11):
+#                 texto = _pytesseract_v11.image_to_string(
+#                     crop,
+#                     lang="por+eng",
+#                     config=f"--oem 3 --psm {psm}",
+#                 ).strip()
 
-                if texto:
-                    candidatos_texto.append(
-                        " ".join(texto.split())
-                    )
+#                 if texto:
+#                     candidatos_texto.append(
+#                         " ".join(texto.split())
+#                     )
 
-            for texto in candidatos_texto:
-                if campo == "owner":
-                    if (
-                        len(
-                            re.findall(
-                                r"[A-Za-zÀ-ÿ]{2,}",
-                                texto,
-                            )
-                        ) >= 2
-                        and "propriedade" not in _key(texto)
-                    ):
-                        candidato_owner = texto.strip(" |:-")
-                        atual_owner = str(
-                            resultado.get("proprietario") or ""
-                        )
+#             for texto in candidatos_texto:
+#                 if campo == "owner":
+#                     if (
+#                         len(
+#                             re.findall(
+#                                 r"[A-Za-zÀ-ÿ]{2,}",
+#                                 texto,
+#                             )
+#                         ) >= 2
+#                         and "propriedade" not in _key(texto)
+#                     ):
+#                         candidato_owner = texto.strip(" |:-")
+#                         atual_owner = str(
+#                             resultado.get("proprietario") or ""
+#                         )
 
-                        if (
-                            not atual_owner
-                            or "canto" in _key(atual_owner)
-                        ):
-                            resultado["proprietario"] = (
-                                candidato_owner
-                            )
-                        break
+#                         if (
+#                             not atual_owner
+#                             or "canto" in _key(atual_owner)
+#                         ):
+#                             resultado["proprietario"] = (
+#                                 candidato_owner
+#                             )
+#                         break
 
-                elif campo == "property":
-                    m = re.search(
-                        r"((?:Fazenda|S[ií]tio)\b.*)",
-                        texto,
-                        re.I,
-                    )
+#                 elif campo == "property":
+#                     m = re.search(
+#                         r"((?:Fazenda|S[ií]tio)\b.*)",
+#                         texto,
+#                         re.I,
+#                     )
 
-                    if m:
-                        valor = m.group(1).strip(
-                            " |:-"
-                        )
-                        valor = re.split(
-                            r"\s+\d{1,3}[.,]\d{1,2}\b",
-                            valor,
-                            maxsplit=1,
-                        )[0].strip()
+#                     if m:
+#                         valor = m.group(1).strip(
+#                             " |:-"
+#                         )
+#                         valor = re.split(
+#                             r"\s+\d{1,3}[.,]\d{1,2}\b",
+#                             valor,
+#                             maxsplit=1,
+#                         )[0].strip()
 
-                        if valor:
-                            atual_prop = str(
-                                resultado.get("propriedade") or ""
-                            )
+#                         if valor:
+#                             atual_prop = str(
+#                                 resultado.get("propriedade") or ""
+#                             )
 
-                            chave_valor = re.sub(
-                                r"[^a-z0-9]",
-                                "",
-                                _key(valor),
-                            )
-                            chave_atual = re.sub(
-                                r"[^a-z0-9]",
-                                "",
-                                _key(atual_prop),
-                            )
+#                             chave_valor = re.sub(
+#                                 r"[^a-z0-9]",
+#                                 "",
+#                                 _key(valor),
+#                             )
+#                             chave_atual = re.sub(
+#                                 r"[^a-z0-9]",
+#                                 "",
+#                                 _key(atual_prop),
+#                             )
 
-                            if (
-                                not atual_prop
-                                or (
-                                    "fa" in chave_valor
-                                    and "fa" not in chave_atual
-                                    and "ea" in chave_atual
-                                )
-                            ):
-                                resultado["propriedade"] = valor
-                            break
+#                             if (
+#                                 not atual_prop
+#                                 or (
+#                                     "fa" in chave_valor
+#                                     and "fa" not in chave_atual
+#                                     and "ea" in chave_atual
+#                                 )
+#                             ):
+#                                 resultado["propriedade"] = valor
+#                             break
 
-                elif campo == "municipio":
-                    m = re.search(
-                        r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .']{2,})"
-                        r"\s*[-–]?\s*"
-                        r"([A-Za-z]{2})\b",
-                        texto,
-                        re.I,
-                    )
+#                 elif campo == "municipio":
+#                     m = re.search(
+#                         r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .']{2,})"
+#                         r"\s*[-–]?\s*"
+#                         r"([A-Za-z]{2})\b",
+#                         texto,
+#                         re.I,
+#                     )
 
-                    if m:
-                        cidade = re.sub(
-                            r"\s+",
-                            " ",
-                            m.group(1),
-                        ).strip(" -")
+#                     if m:
+#                         cidade = re.sub(
+#                             r"\s+",
+#                             " ",
+#                             m.group(1),
+#                         ).strip(" -")
 
-                        partes = cidade.split()
-                        compactadas = []
-                        for parte in partes:
-                            if (
-                                not compactadas
-                                or _key(compactadas[-1])
-                                != _key(parte)
-                            ):
-                                compactadas.append(parte)
+#                         partes = cidade.split()
+#                         compactadas = []
+#                         for parte in partes:
+#                             if (
+#                                 not compactadas
+#                                 or _key(compactadas[-1])
+#                                 != _key(parte)
+#                             ):
+#                                 compactadas.append(parte)
 
-                        cidade = " ".join(compactadas)
+#                         cidade = " ".join(compactadas)
 
-                        if cidade:
-                            if not str(
-                                resultado.get("municipio") or ""
-                            ).strip():
-                                resultado["municipio"] = (
-                                    f"{cidade} - {m.group(2).upper()}"
-                                )
-                            break
+#                         if cidade:
+#                             if not str(
+#                                 resultado.get("municipio") or ""
+#                             ).strip():
+#                                 resultado["municipio"] = (
+#                                     f"{cidade} - {m.group(2).upper()}"
+#                                 )
+#                             break
 
-                else:
-                    compacto = re.sub(
-                        r"[^0-9A-Z]",
-                        "",
-                        texto.upper()
-                    )
+#                 else:
+#                     compacto = re.sub(
+#                         r"[^0-9A-Z]",
+#                         "",
+#                         texto.upper()
+#                     )
 
-                    if re.fullmatch(
-                        r"\d{3}[A-Z]\d{4}",
-                        compacto,
-                    ):
-                        resultado["bloco"] = compacto
-                        break
+#                     if re.fullmatch(
+#                         r"\d{3}[A-Z]\d{4}",
+#                         compacto,
+#                     ):
+#                         resultado["bloco"] = compacto
+#                         break
 
-                    if re.fullmatch(
-                        r"\d{2}[A-Z]\d{4}",
-                        compacto,
-                    ):
-                        resultado["bloco"] = "1" + compacto
-                        break
+#                     if re.fullmatch(
+#                         r"\d{2}[A-Z]\d{4}",
+#                         compacto,
+#                     ):
+#                         resultado["bloco"] = "1" + compacto
+#                         break
 
-    return resultado
+#     return resultado
 
 
 def _v17_recuperar_metadados_final(processed):
@@ -8962,7 +9481,7 @@ def _v17_recuperar_metadados_final(processed):
             if valor and not campos[campo]:
                 campos[campo] = valor
 
-    return campos
+    return campos 
 
 
 
@@ -9036,23 +9555,44 @@ def extrair_dados(processed):
 
     if md_texto.get("proprietario"):
         atual = str(md.get("proprietario") or "")
+        cand_prop = md_texto["proprietario"]
+        if not any(k in _key(cand_prop) for k in ["carreador", "area", "status", "unidade gestora", "(%)"]):
+            if (
+                not atual
+                or "canto" in _key(atual)
+                or (len(cand_prop) > len(atual) + 5 and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", atual)) < 2)
+            ):
+                md["proprietario"] = cand_prop
+
+    if md.get("proprietario"):
+        md["proprietario"] = re.split(r"\b(?:[AÁ]rea|Carreador|Status|\d+,\d+%)\b", md["proprietario"], flags=re.I)[0].strip(" |:;,-")
+        partes_p = md["proprietario"].split()
+        limpas_p = []
+        for p in partes_p:
+            if not limpas_p or _key(limpas_p[-1]) != _key(p):
+                limpas_p.append(p)
+        md["proprietario"] = " ".join(limpas_p)
+
+    if md_texto.get("propriedade"):
+        atual_prop = str(md.get("propriedade") or "")
         if (
-            not atual
-            or "canto" in _key(atual)
-            or len(md_texto["proprietario"]) > len(atual) + 5
+            not atual_prop
+            or ("fazenda" in md_texto["propriedade"].lower() and "fazenda" not in atual_prop.lower())
+            or ("sitio" in _key(md_texto["propriedade"]) and "sitio" not in _key(atual_prop))
+            or len(atual_prop) > len(md_texto["propriedade"]) + 4
         ):
-            md["proprietario"] = md_texto["proprietario"]
+            md["propriedade"] = md_texto["propriedade"]
 
-    if (
-        md_texto.get("propriedade")
-        and not md.get("propriedade")
-    ):
-        md["propriedade"] = md_texto["propriedade"]
+    if md.get("propriedade"):
+        m_prop = re.search(r"((?:Fazenda|S[ií]tio)\b.*)", md["propriedade"], re.I)
+        if m_prop:
+            md["propriedade"] = m_prop.group(1).strip()
+        md["propriedade"] = re.split(r"\s+\d{1,3}[.,]\d{1,2}\b", md["propriedade"], maxsplit=1)[0].strip()
 
-    md = _v17_ocr_metadata_cells(
-        processed,
-        md,
-    )
+    # md = _v17_ocr_metadata_cells(
+    #     processed,
+    #     md,
+    # )
 
     # Última limpeza de município: nunca aceita duplicação textual
     # produzida por OCR como se fosse um novo município.
@@ -9079,19 +9619,40 @@ def extrair_dados(processed):
     # ------------------------------------------------------------
     # 2. Resgata linhas que versões anteriores perderam.
     # ------------------------------------------------------------
-    resgate = _v17_tabela_por_texto(
-        processed
-    )
-
     existentes = (
         resultado.get("talhoes")
         or []
     )
 
+    resgate = []
+    grade_resgate = []
+
+    if len(existentes) < 4:
+        resgate = _v17_tabela_por_texto(
+            processed
+        )
+        paginas = (
+            processed.get("paginas")
+            or processed.get("pages")
+            or []
+        )
+        pasta = processed.get("pasta_saida", "")
+        for page_index, _page in enumerate(paginas):
+            caminho = _os_v12.path.join(
+                pasta,
+                f"pagina_{page_index + 1:03d}.png",
+            )
+            if _os_v12.path.exists(caminho):
+                regs = _v18_extrair_tabelas_grade(caminho)
+                for r in regs:
+                    r["pagina"] = page_index
+                grade_resgate.extend(regs)
+
     # Recupera células tanto das linhas novas quanto das linhas que a
     # versão anterior já encontrou, mas deixou com campo vazio.
     candidatos_celulas = [
         *existentes,
+        *grade_resgate,
         *resgate,
     ]
 
@@ -9115,11 +9676,25 @@ def extrair_dados(processed):
             or resultado["metadata"].get("bloco", "")
         )
 
-        if bloco:
+        blocos_existentes = resultado.get("blocos") or []
+        if len(blocos_existentes) > 1:
+            # Preserva múltiplos blocos originais para não aglutinar blocos distintos
+            pass
+        else:
+            bloco_final = bloco or (blocos_existentes[0].get("bloco") if blocos_existentes else "")
             resultado["blocos"] = [{
-                "bloco": bloco,
+                "bloco": bloco_final,
                 "talhoes": resultado["talhoes"],
             }]
+    elif not resultado.get("blocos") and resultado.get("talhoes"):
+        bloco_final = (
+            resultado.get("bloco")
+            or resultado.get("metadata", {}).get("bloco", "")
+        )
+        resultado["blocos"] = [{
+            "bloco": bloco_final,
+            "talhoes": resultado["talhoes"],
+        }]
 
     return resultado
 

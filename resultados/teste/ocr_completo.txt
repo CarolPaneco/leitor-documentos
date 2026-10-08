@@ -4,76 +4,68 @@ PÁGINA 1
 
 ======================================================================
 
-Talhão [ Variedade | Área (ha) | Plantio [Talhão| variedade Járea (ha)] Plantio |
-e 1 | RB075322 | 567 [06032026] 19 | RB075322 | 1,04 [06/03/2026]
-| 2
-3 | RB075322 | 433 [06032026] 21 | RB075322 | 0,81 [06/03/2026]
-| 4
-= 5 28 | 1,08 [06/03/2026]
-f 6
-7 8 | | 0.10 [1270512020] 24
-9 | RB075322 | 940 [06032026] 25 | RB075322 | 1,79 [06/03/2026]
-10 RBO7522 | 085 [06/03/2026] 25 | | 172 [0609/2026]
-“1 | | 795 [06032026] 27 | RB075322 | 0,58 [06/03/2026]
-12
-13
-14 | RB075322 | 092 [06/03/2026] 30 | RB075322 | 1,66 [06/03/2026]
-15
-16
-17
-18 | RB075322 | 193 [060320260] | | Tasso ton |
-PASTO
-19 MATA
-26 1,04ha . \ E
-1,72ha 24 an B
-25 2,04ha ul %
-BL-116P1608 179ha = 18 7,95ha \ NA GB EN
-o 1,93ha \
->. 28 1,42ha NA: me
-SS
-+2 x Ss ko
-29 2 &
-30 rr Bh 13 10
-E 13,54ha > 1,66ha we E 0,91ha 9,85ha
+7 NQ
+Ss so
+oe
+“>
+PÁ À LARA
+LF. Ve 8 \
+VA Av
+6 V )
+! S . LARANJA
+yy
+/ ) ‘
+KO E APP
+wf RESTS Fs
+VÁ Eucalipto >) Terra Nua \
+Ny N/A jp 33 So \ Q PA
+By SY J )
+GQ SK 14,28ha 25 /
+| | SS eff of 26 5,4Tha 5» _/” LL 18, A, | MATA
+/
+ROÇA y Y Yypss 13 Yi yg UU WY
+we A / 10
+S WS A 4,55ha 15
+NA E, = Yj 4,02ha
+on 48 7 Í
+GS 39,48ha f \
+À \ LARANJA
+É X
+lo] \ / Ww ),
+y
+/ y
+7 . LF.
+LE /
+a, APP LARANJA
+— e
+en o | ms af / f
+o SE E ee. E
+BL-302F0003
 =
-3 31 y ? MATA
-= a 253ha ? MATA 1.35,
-% APP o 4, : ha
-5
-o | A Ls ao eee) DV q
-. 4 Sds 8
-23 SA EQ 9 0,10ha
-1,08ha ~ os oS 9,40ha ?
-Ro À
-33 22 2.
-18,40ha 2 0,81ha \
-: 21
-18,58ha +.
-0,81ha “. 20 7
-0,88ha 7,97ha
-40 4 BL-308P0055
-APP 4,41ha
-6
-3 11,22ha
-BL-308P0067 4,33ha
-Arvores e
-3
-Area sem Plantar 1 3
-RESUMO DE ÁREAS R (ha) dá 2 sta &
-Área de Cana 153,67 4,79ha n ,
-Area de Carreador 9,00 rá 1
-Patio Fixo 0,19 5,67ha
-Área sem Plantar 0,34 Br.
-Árvores 0,02 Jog, So, “sa 6;
-Mata 2,18 a APP 1S
-Área Total 165,40
-Bloco: 308P0066 Status: Plantio - 2026 Área x de Cana: 153,67 ha ou 63,50 alq. Localização =
-a Tereos Agrupamento: A grupamento to: Área de Carreador: 9,00 ha ou 3,72 alq. E em ou O | ses ae
-VW Proprietário: x i Px E ye CP Ata a See
-Celia de Souza Diniz Area de c Carreador Carreador d (%): \. 5,51% o P| pao To
-Un. Gestora: Propriedade: AREA TOTAL : ha pero E Rena el dido ad
-São José Fazenda Santa Elisa 165,40 ou 68,35 alq. [ae RE 7 S08E0066 vols
-Município: Levantamento: Data último desenho Escala: Decliv. Média: a SR 4 eat wy
-é JA DATLAS ATLAS Barretos - SP Jeova 16/07/2026 1/ 1/10000 10.000 5,80% (Me ccd AR MA aaa
-agrimensura Distancia até Unidade Gestora (km): Tipo Desenho: / Longitude - 2000) 1 con es al
-R tease Cane eremiaso 43 km Convencional Arthur Almeida 20°34'45,311"S / 48°48'45,397°W ee 7 RA
+m
+MATA ===
+Talhão| Variedade | Área | Plantio | Talhão | Variedade | Área | Plantio |
+RESUMO DE AREAS (ha 1 CTC4 10,31 | 06/04/2023 | 20 CTC9003 15/03/2025]
+: de Cana 210,28 | 2 | CTC4 | 7,28 | [06042023] | 22 | RB966928 | 1,06 | 2013 |
+Area 3 CTC4 9,32 [06/042023| 25 CTC9003 47 [06/04/2023
+Area de Carreador 13,52 [| 4 | CTC4 | 633 | 06/04/2023 | [26 | 26 | | PLANTAR] SEM [2026]
+Area sem Plantar a 29,07 | 5 [crea CTC4 | 4,15 33 | CTC9003 | 14,28 | 10/04/2026)
+Cai Caixa Caixa de de Contenção Cont 0,02 | 6 | CTC9003 | 106 | 10/04/2026 | 34 | CTC9003 | 2137 [10/04/2026] |
+0 7 CTC9003 0,89 _| 10/04/2026 | 35 CTC9003 10/04/2026
+Eucalipto 5,00 Pedra 10 [SEMPLANTAR| 4,55 2026 36 | CTC9003 | 1,39
+Pedra 0,03 | 1,0 | 11 CTC9003 9,23 _| 37 CTC9003 24,26
+Arvore 0,02 Árvore 13 |SEMPLANTAR| 7,78 2026 41 | CTC9003 | 15,05 [06/04/2023]
+TerraNua Nua 580. 5,80 é OD á | 15 |SEMPLANTAR| 402 | 2026 | 43 | CTC9003 | 393 [06/04/2023]
+Terra O Caixa de Contenção [ie |SEMPLANTAR| PLANTAR| 1259 | [72026] [25 | | 39,48 | [15/03/2025]
+Área Total 263,69 | 18 | CTC9003 | 484 | 15/03/2025 | 239,30 239,30 |
+Bloco: 302F0006| Status: Mapa de Safra 2027/28 _ [Área A de Cana: 210,23 ha ou 86,87 alq . a
+Pas "e A Agrupamento: to: Área de Carreador: G E o y
+Tereos 13,52ha0u5,59alq 38 9:59 a frp | o
+WA Proprietário: o Area x de Carreador (%): o E DV Sid | UMA
+Antonio Francisco Junqueira Franco 5,23% am | 4 nia q
+Un. Gestora: Propriedade: x 302F0006 el + a
+São José Fazenda Santa Lúcia AREATOTAL: AREA TOTAL : 263,69 ha ou 108,96 alq | gl
+» Municipio: Levantamento: Data último desenho | Escala: Decliv. Média: § pana i Sue, é
+«JATUAS| ENGENHARIA Barretos Barretos - sp Jeová 17/07/2026 _|1/ __|1/ 15.000 6
+& topografia | Distancia = até Unidade Gestora (km): T Desenho: ~ Latitude Latitude Longitude (Sirgas - 2000) pes Ed ASS am wa Ç| i
+cet o Tel: halos 24 km Arthur Almeida _|20°40'44,682"S/48°42'26,609"W po ea
