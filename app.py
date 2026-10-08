@@ -744,6 +744,112 @@ def api_gerar_excel():
 
 
 # ============================================================
+# API DIRETA PARA POWER AUTOMATE / SHAREPOINT
+# (Recebe PDF e devolve o Excel diretamente)
+# ============================================================
+
+@app.route(
+    "/api/processar-e-gerar-excel",
+    methods=["POST"]
+)
+def api_processar_e_gerar_excel():
+    import base64
+
+    nome_arquivo = request.headers.get("X-Filename") or request.headers.get("x-filename") or "documento.pdf"
+    conteudo_bytes = None
+
+    if "arquivo" in request.files:
+        arq = request.files["arquivo"]
+        nome_arquivo = arq.filename or nome_arquivo
+        conteudo_bytes = arq.read()
+    elif request.is_json:
+        dados = request.get_json(silent=True) or {}
+        nome_arquivo = dados.get("nome", nome_arquivo)
+        b64 = dados.get("conteudo") or dados.get("arquivo") or ""
+        try:
+            conteudo_bytes = base64.b64decode(b64)
+        except Exception:
+            conteudo_bytes = None
+    else:
+        conteudo_bytes = request.get_data()
+
+    if not conteudo_bytes:
+        return jsonify({
+            "sucesso": False,
+            "erro": "Nenhum arquivo ou conteúdo binário foi recebido.",
+        }), 400
+
+    extensao = os.path.splitext(nome_arquivo)[1].lower() or ".pdf"
+    if extensao not in [f".{ext}" for ext in ALLOWED_EXTENSIONS]:
+        extensao = ".pdf"
+
+    pasta_temp = tempfile.mkdtemp(prefix="pa_upload_")
+    caminho_temp = os.path.join(pasta_temp, f"doc{extensao}")
+    resultado_ocr = None
+
+    try:
+        with open(caminho_temp, "wb") as f:
+            f.write(conteudo_bytes)
+
+        documento_id = (
+            datetime.now().strftime("%Y%m%d_%H%M%S")
+            + "_"
+            + uuid.uuid4().hex[:8]
+        )
+
+        processor = get_processor()
+        resultado_ocr = processor.processar(caminho_temp, documento_id)
+
+        if not resultado_ocr.get("sucesso"):
+            raise RuntimeError(
+                resultado_ocr.get("erro", "Erro no processamento do documento.")
+            )
+
+        documento = extrair_dados(resultado_ocr)
+        documento = validar_documento(documento)
+        linhas = extrair_linhas_excel(documento)
+
+        if not linhas:
+            return jsonify({
+                "sucesso": False,
+                "erro": "Nenhum dado ou tabela encontrada no documento.",
+            }), 422
+
+        excel = criar_excel(linhas)
+        nome_base = os.path.splitext(nome_arquivo)[0]
+        nome_download = f"{nome_base}_dados.xlsx"
+
+        return send_file(
+            excel,
+            as_attachment=True,
+            download_name=nome_download,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    except Exception as erro:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "sucesso": False,
+            "erro": str(erro),
+        }), 500
+
+    finally:
+        try:
+            shutil.rmtree(pasta_temp, ignore_errors=True)
+        except Exception:
+            pass
+
+        if resultado_ocr:
+            pasta_res = resultado_ocr.get("pasta_saida")
+            if pasta_res and os.path.exists(pasta_res):
+                try:
+                    shutil.rmtree(pasta_res, ignore_errors=True)
+                except Exception:
+                    pass
+
+
+# ============================================================
 # COMPATIBILIDADE
 # ============================================================
 
