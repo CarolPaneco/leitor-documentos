@@ -162,6 +162,12 @@ def extrair_linhas_excel(documento):
             if not isinstance(talhao, dict):
                 continue
 
+            var_t = str(talhao.get("variedade") or "").strip()
+            if any(k in var_t.lower() for k in ["bloco", "status", "mapa de", "área total", "resumo de área"]):
+                continue
+            if not str(talhao.get("area") or talhao.get("área") or "").strip() and not str(talhao.get("talhao") or talhao.get("talhão") or "").strip():
+                continue
+
             linhas.append({
                 "Bloco":
                     str(

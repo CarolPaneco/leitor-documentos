@@ -8179,7 +8179,10 @@ def _v18_extrair_tabelas_grade(caminho):
                     inner_p = cell_p[3:-3, 6:-6] if ph > 6 and pw > 12 else cell_p
                     p_txt = _pytesseract_v12.image_to_string(inner_p, config="--psm 6").strip()
 
-                data_norm = _v11_normalizar_data(p_txt) or p_txt
+                data_norm = _v11_normalizar_data(p_txt)
+                if not data_norm:
+                    m_yr = re.search(r"\b(?:19\d{2}|20\d{2})\b", p_txt)
+                    data_norm = m_yr.group(0) if m_yr else ""
 
                 m_num = re.search(r"\b\d{1,4}\b", t_txt)
                 talhao_num = ""
@@ -8199,9 +8202,21 @@ def _v18_extrair_tabelas_grade(caminho):
                 if clean_v and re.fullmatch(r"\d+(?:\.\d+)?", clean_v):
                     var_norm = ""
 
-                # Descarta se a variedade contiver unidades de medida ou metadados de rodapé
-                if any(k in var_norm.lower() for k in ["alq", "alqueire", "localiz", "status", "ha ou", "área", "area", "carreador", "descanso", "gestora"]):
+                # Descarta se a variedade contiver unidades de medida ou metadados de rodapé/cabeçalho
+                termos_ignorar = [
+                    "alq", "alqueire", "localiz", "status", "ha ou", "área", "area", "carreador",
+                    "descanso", "gestora", "bloco", "mapa", "safra", "propriedade", "proprietari",
+                    "municip", "levantamento", "desenho", "escala", "decliv", "latitude", "longitude",
+                    "coordenad", "patio", "pátio", "torta", "composto", "resumo", "total", "pivo",
+                    "pivô", "pasto", "app", "reserva", "cana", "estrada", "rodovia", "sede", "fazenda",
+                    "sitio", "sítio", "unidade"
+                ]
+                if any(k in var_norm.lower() for k in termos_ignorar) or re.search(r"\bbloco\b", var_norm.lower()) or var_norm.lower().startswith("bl-"):
                     var_norm = ""
+
+                # Se a linha não tiver número de talhão E não tiver área, é ruído de rodapé/cabeçalho e nunca um talhão real!
+                if not talhao_num and not area_norm:
+                    continue
 
                 # Tratamento de células mescladas verticalmente ou talhão repetido:
                 # Importante: só herda ou combina se a linha tiver uma variedade legítima!
@@ -8271,7 +8286,12 @@ def _v18_extrair_tabelas_grade(caminho):
                         if not rec["talhao"] or int(rec["talhao"]) > 100 or abs(int(rec["talhao"]) - int(p_val)) != 1:
                             rec["talhao"] = str(int(p_val) + 1)
 
-            todos_registros.extend([r for r in registros_sub if r["talhao"]])
+            todos_registros.extend([
+                r for r in registros_sub
+                if r["talhao"]
+                and r.get("variedade")
+                and not any(k in r["variedade"].lower() for k in ["bloco", "status", "resumo", "total", "área total"])
+            ])
 
     return todos_registros
 

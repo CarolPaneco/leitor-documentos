@@ -73,10 +73,17 @@ def extrair_linhas_para_excel(documento):
         bloco_mun = str(b.get("municipio") or municipio).strip()
 
         for talhao in (b.get("talhoes") or []):
+            var_t = str(talhao.get("variedade") or "").strip()
+            # Descarta vazamento de blocos de metadados, status ou rodapés
+            if any(k in var_t.lower() for k in ["bloco", "status", "mapa de", "área total", "resumo de área"]):
+                continue
+            if not str(talhao.get("area") or "").strip() and not str(talhao.get("talhao") or "").strip():
+                continue
+
             linhas.append({
                 "Bloco": bloco_codigo,
                 "Talhão": str(talhao.get("talhao") or "").strip(),
-                "Variedade": str(talhao.get("variedade") or "").strip(),
+                "Variedade": var_t,
                 "Área": str(talhao.get("area") or "").strip(),
                 "Plantio": str(talhao.get("plantio") or "").strip(),
                 "Propriedade": str(talhao.get("propriedade") or bloco_prop).strip(),
