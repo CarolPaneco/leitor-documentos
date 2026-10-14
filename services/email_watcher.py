@@ -20,6 +20,7 @@ from services.validator import validar_documento
 
 GMAIL_USER = os.environ.get("GMAIL_USER", "robo.agricola.leitor@gmail.com")
 GMAIL_PASS = os.environ.get("GMAIL_PASS", "etexjeywmxhbihdi")
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "").strip()
 
 ALLOWED_EXTENSIONS = {
     ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"
@@ -122,12 +123,65 @@ def gerar_arquivo_excel(linhas):
     return memoria
 
 
+def _enviar_email_brevo_api(destinatario, assunto, corpo_html, excel_bytes=None, nome_anexo=None):
+    """
+    Envia e-mail com anexo usando a API REST HTTPS do Brevo (porta 443).
+    Isso contorna o bloqueio de portas SMTP (25, 465, 587) no Render.
+    """
+    import base64
+    import json
+    import urllib.error
+    import urllib.request
+
+    url = "https://api.brevo.com/v3/smtp/email"
+    headers = {
+        "accept": "application/json",
+        "api-key": BREVO_API_KEY,
+        "content-type": "application/json",
+    }
+
+    payload = {
+        "sender": {
+            "name": "Robô Leitor Agrícola",
+            "email": GMAIL_USER,
+        },
+        "to": [
+            {"email": destinatario}
+        ],
+        "subject": assunto,
+        "htmlContent": corpo_html,
+    }
+
+    if excel_bytes and nome_anexo:
+        excel_bytes.seek(0)
+        conteudo_b64 = base64.b64encode(excel_bytes.read()).decode("utf-8")
+        payload["attachment"] = [
+            {
+                "name": nome_anexo,
+                "content": conteudo_b64,
+            }
+        ]
+
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            codigo = resp.getcode()
+            return codigo in (200, 201, 202)
+    except urllib.error.HTTPError as e:
+        detalhe = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Erro Brevo API ({e.code}): {detalhe}")
+
+
 def enviar_resposta_email(destinatario, assunto_original, linhas, docs_info, erro_msg=None):
     msg = MIMEMultipart()
     msg["From"] = f"Robô Leitor Agrícola <{GMAIL_USER}>"
     msg["To"] = destinatario
 
     qtd_docs = len(docs_info)
+    excel_bytes = None
+    nome_anexo = None
+
     if erro_msg:
         msg["Subject"] = f"Re: {assunto_original}" if assunto_original else "Re: Processamento de Documentos Agrícolas"
         corpo_html = f"""
@@ -204,6 +258,7 @@ def enviar_resposta_email(destinatario, assunto_original, linhas, docs_info, err
         else:
             nome_anexo = f"dados_agricolas_{timestamp}.xlsx"
 
+        excel_bytes.seek(0)
         part = MIMEApplication(
             excel_bytes.read(),
             _subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -211,6 +266,24 @@ def enviar_resposta_email(destinatario, assunto_original, linhas, docs_info, err
         part.add_header("Content-Disposition", f"attachment; filename=\"{nome_anexo}\"")
         msg.attach(part)
 
+    # 1. Tenta envio via Brevo API (se configurado, evita bloqueio de porta 465/587 do Render)
+    if BREVO_API_KEY:
+        try:
+            print(f"[EMAIL] Enviando resposta via Brevo API (HTTPS porta 443) para: {destinatario}...")
+            _enviar_email_brevo_api(
+                destinatario=destinatario,
+                assunto=str(msg["Subject"]),
+                corpo_html=corpo_html,
+                excel_bytes=excel_bytes,
+                nome_anexo=nome_anexo,
+            )
+            print(f"[EMAIL] Resposta enviada com sucesso via Brevo API para: {destinatario} ({qtd_docs} doc(s), {len(linhas)} linha(s))")
+            return
+        except Exception as e:
+            print(f"[EMAIL ERROR] Falha no envio via Brevo API: {e}")
+            raise e
+
+    # 2. Fallback: SMTP tradicional via Gmail (funciona em ambiente local ou servidores com porta liberada)
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(GMAIL_USER, GMAIL_PASS)
         smtp.sendmail(GMAIL_USER, [destinatario], msg.as_string())

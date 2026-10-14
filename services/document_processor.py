@@ -558,6 +558,7 @@ class DocumentProcessor:
         # OCR PRINCIPAL
         # ----------------------------------------------------
 
+        print("[OCR 1/3] Executando OCR com contraste (PSM 6)...")
         dados_ocr = self._executar_ocr(
             imagem_contraste
         )
@@ -566,6 +567,7 @@ class DocumentProcessor:
         # OCR COM THRESHOLD
         # ----------------------------------------------------
 
+        print("[OCR 2/3] Executando OCR com binarizacao/threshold...")
         imagem_threshold = cv2.threshold(
             imagem_contraste,
             180,
@@ -582,6 +584,7 @@ class DocumentProcessor:
         # ----------------------------------------------------
         # PSM 3 costuma recuperar rótulos e valores lineares que o PSM 6
         # perde, sem substituir o OCR principal usado pela tabela.
+        print("[OCR 3/3] Executando OCR de layout global (PSM 3)...")
         dados_ocr_global = self._executar_ocr(
             imagem_contraste,
             psm=3
