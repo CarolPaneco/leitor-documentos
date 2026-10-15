@@ -516,6 +516,18 @@ def index():
     )
 
 
+@app.route(
+    "/ping",
+    methods=["GET"]
+)
+def ping():
+    return jsonify({
+        "status": "ok",
+        "servico": "Robô Leitor Agrícola",
+        "vigilante_email": "ativo"
+    }), 200
+
+
 # ============================================================
 # PROCESSAR UM ARQUIVO
 # ============================================================
