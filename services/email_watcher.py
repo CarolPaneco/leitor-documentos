@@ -13,6 +13,12 @@ from email.header import decode_header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
+import functools
+
+_builtin_print = print
+def print(*args, **kwargs):
+    kwargs.setdefault("flush", True)
+    _builtin_print(*args, **kwargs)
 
 from services.document_processor import get_processor
 from services.agricultural_extractor import extrair_dados
@@ -509,8 +515,12 @@ def processar_lotes_prontos():
 
 def loop_vigilante_email(intervalo_segundos=15):
     print(f"[EMAIL WORKER] Vigilante de e-mail iniciado para {GMAIL_USER} (intervalo: {intervalo_segundos}s, janela silêncio: {JANELA_SILENCIO_SEGUNDOS}s)")
+    ciclo = 0
     while True:
         try:
+            ciclo += 1
+            if ciclo % 4 == 1:
+                print(f"[EMAIL WORKER] Monitorando caixa de entrada do Gmail... (robô 100% ativo)")
             coletar_novos_emails()
             processar_lotes_prontos()
         except Exception as e:
