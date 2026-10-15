@@ -457,9 +457,12 @@ def processar_lotes_prontos():
                 prop_doc = ""
 
                 if resultado_ocr.get("sucesso"):
+                    print(f"[EXTRACAO] Analisando tabelas e talhoes ({nome_arq})...")
                     doc = extrair_dados(resultado_ocr)
+                    print(f"[EXTRACAO] Validando campos e montando linhas...")
                     doc = validar_documento(doc)
                     linhas_doc = extrair_linhas_para_excel(doc)
+                    print(f"[EXTRACAO] {len(linhas_doc)} talhao(oes) identificado(s) em {nome_arq}.")
                     todas_linhas.extend(linhas_doc)
 
                     meta = doc.get("metadata") or {}

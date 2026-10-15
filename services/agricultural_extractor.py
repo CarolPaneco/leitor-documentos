@@ -8154,30 +8154,45 @@ def _v18_extrair_tabelas_grade(caminho):
                 inner_t = cell_t[3:-3, 4:-4] if th > 6 and tw > 8 else cell_t
                 
                 # Leitura normal da célula de talhão
-                t_txt = _pytesseract_v12.image_to_string(inner_t, config="--psm 6").strip()
+                try:
+                    t_txt = _pytesseract_v12.image_to_string(inner_t, config="--psm 6", timeout=8).strip()
+                except Exception:
+                    t_txt = ""
                 if not t_txt:
-                    t_txt = _pytesseract_v12.image_to_string(cell_t, config="--psm 6").strip()
+                    try:
+                        t_txt = _pytesseract_v12.image_to_string(cell_t, config="--psm 6", timeout=8).strip()
+                    except Exception:
+                        t_txt = ""
 
                 v_txt = ""
                 if col_var is not None and col_var < len(clustered_x) - 1:
                     cell_v = crop[y1:y2, clustered_x[col_var] : clustered_x[col_var + 1]]
                     vh, vw = cell_v.shape[:2]
                     inner_v = cell_v[3:-3, 6:-6] if vh > 6 and vw > 12 else cell_v
-                    v_txt = _pytesseract_v12.image_to_string(inner_v, config="--psm 6").strip()
+                    try:
+                        v_txt = _pytesseract_v12.image_to_string(inner_v, config="--psm 6", timeout=8).strip()
+                    except Exception:
+                        v_txt = ""
 
                 a_txt = ""
                 if col_area is not None and col_area < len(clustered_x) - 1:
                     cell_a = crop[y1:y2, clustered_x[col_area] : clustered_x[col_area + 1]]
                     ah, aw = cell_a.shape[:2]
                     inner_a = cell_a[3:-3, 6:-6] if ah > 6 and aw > 12 else cell_a
-                    a_txt = _pytesseract_v12.image_to_string(inner_a, config="--psm 6").strip()
+                    try:
+                        a_txt = _pytesseract_v12.image_to_string(inner_a, config="--psm 6", timeout=8).strip()
+                    except Exception:
+                        a_txt = ""
 
                 p_txt = ""
                 if col_plantio is not None and col_plantio < len(clustered_x) - 1:
                     cell_p = crop[y1:y2, clustered_x[col_plantio] : clustered_x[col_plantio + 1]]
                     ph, pw = cell_p.shape[:2]
                     inner_p = cell_p[3:-3, 6:-6] if ph > 6 and pw > 12 else cell_p
-                    p_txt = _pytesseract_v12.image_to_string(inner_p, config="--psm 6").strip()
+                    try:
+                        p_txt = _pytesseract_v12.image_to_string(inner_p, config="--psm 6", timeout=8).strip()
+                    except Exception:
+                        p_txt = ""
 
                 data_norm = _v11_normalizar_data(p_txt)
                 if not data_norm:
