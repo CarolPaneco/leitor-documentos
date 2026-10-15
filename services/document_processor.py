@@ -40,7 +40,7 @@ from config import RESULT_FOLDER, CPU_THREADS
 # CONFIGURAÇÕES
 # ============================================================
 
-DPI_PADRAO = 250
+DPI_PADRAO = 180
 
 # Idioma principal.
 # O tesseract-ocr-por precisa estar instalado.

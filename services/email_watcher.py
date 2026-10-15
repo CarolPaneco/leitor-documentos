@@ -33,9 +33,9 @@ ALLOWED_EXTENSIONS = {
 }
 
 # Configurações do lote (debounce / agrupamento inteligente)
-# Janela de silêncio: aguarda 60s sem novos e-mails do mesmo remetente antes de fechar o lote,
-# garantindo que lotes de até 20+ arquivos enviados pelo SharePoint cheguem completamente.
-JANELA_SILENCIO_SEGUNDOS = int(os.environ.get("JANELA_SILENCIO_SEGUNDOS", 60))
+# Janela de silêncio: aguarda 20s sem novos e-mails do mesmo remetente antes de fechar o lote,
+# garantindo que lotes enviados pelo SharePoint cheguem completamente sem espera excessiva.
+JANELA_SILENCIO_SEGUNDOS = int(os.environ.get("JANELA_SILENCIO_SEGUNDOS", 20))
 # Janela máxima: se novos e-mails continuarem chegando sem parar, após 300s (5 min)
 # fechamos o lote atual para não reter indefinidamente os documentos já recebidos.
 JANELA_MAXIMA_SEGUNDOS = int(os.environ.get("JANELA_MAXIMA_SEGUNDOS", 300))

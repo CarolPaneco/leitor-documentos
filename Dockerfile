@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PORT=5000
 ENV RENDER=true
-ENV JANELA_SILENCIO_SEGUNDOS=60
+ENV JANELA_SILENCIO_SEGUNDOS=20
 
 # Instala Tesseract OCR, suporte a português/inglês e bibliotecas gráficas
 RUN apt-get update && apt-get install -y --no-install-recommends \
