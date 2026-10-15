@@ -44,6 +44,9 @@ JANELA_MAXIMA_SEGUNDOS = int(os.environ.get("JANELA_MAXIMA_SEGUNDOS", 300))
 # Chave: remetente_email (minúsculas)
 LOTES_PENDENTES = {}
 
+# Guarda IDs de e-mails já processados nesta sessão para não reprocessar
+EMAILS_PROCESSADOS_IDS = set()
+
 
 def _decodificar_cabecalho(texto):
     if not texto:
@@ -306,20 +309,31 @@ def coletar_novos_emails():
         imap.login(GMAIL_USER, GMAIL_PASS)
         imap.select("INBOX")
 
+        ids_candidatos = []
         status, mensagens = imap.search(None, "UNSEEN")
-        if status != "OK" or not mensagens[0]:
-            imap.logout()
-            return
+        if status == "OK" and mensagens[0]:
+            ids_candidatos.extend(mensagens[0].split())
 
-        ids = mensagens[0].split()
+        # Se não houver novos UNSEEN, verifica os últimos 5 e-mails da caixa
+        # para garantir que nenhum PDF seja perdido caso o e-mail tenha sido aberto no navegador
+        status_all, all_msgs = imap.search(None, "ALL")
+        if status_all == "OK" and all_msgs[0]:
+            todos = all_msgs[0].split()
+            for m_id in todos[-5:]:
+                if m_id not in ids_candidatos:
+                    ids_candidatos.append(m_id)
+
+        # Filtra apenas e-mails ainda não processados nesta sessão
+        ids = [m for m in ids_candidatos if m.decode() not in EMAILS_PROCESSADOS_IDS]
         if not ids:
             imap.logout()
             return
 
-        print(f"[EMAIL INGEST] {len(ids)} novo(s) e-mail(s) detectado(s)!")
+        print(f"[EMAIL INGEST] {len(ids)} novo(s) e-mail(s) a analisar!")
         agora = time.time()
 
         for msg_id in ids:
+            EMAILS_PROCESSADOS_IDS.add(msg_id.decode())
             status_f, dados_msg = imap.fetch(msg_id, "(RFC822)")
             if status_f != "OK" or not dados_msg:
                 continue
