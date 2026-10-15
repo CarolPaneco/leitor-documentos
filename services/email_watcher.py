@@ -331,6 +331,15 @@ def coletar_novos_emails():
             assunto = _decodificar_cabecalho(msg.get("Subject", ""))
             print(f"[EMAIL INGEST] Lendo de: {remetente_email} | Assunto: {assunto}")
 
+            # Ignora alertas automáticos de sistema, no-reply e provedores
+            ignorar_remetente = any(k in remetente_email for k in [
+                "brevo.com", "google.com", "noreply", "no-reply", "account-alerts",
+                "notification", "mailer-daemon", "postmaster"
+            ])
+            if ignorar_remetente:
+                print(f"[EMAIL INGEST] Ignorando e-mail automático de sistema: {remetente_email}")
+                continue
+
             # Coleta anexos deste e-mail
             anexos = []
             for part in msg.walk():
