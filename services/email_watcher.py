@@ -27,7 +27,10 @@ def print(*args, **kwargs):
             LOGS_RECENTES.pop(0)
     except Exception:
         pass
-    _builtin_print(*args, **kwargs)
+    try:
+        _builtin_print(*args, **kwargs)
+    except Exception:
+        pass
 
 from services.document_processor import get_processor
 from services.agricultural_extractor import extrair_dados

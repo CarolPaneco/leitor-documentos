@@ -1138,17 +1138,22 @@ def arquivo_muito_grande(_erro):
 # VIGILANTE DE E-MAILS (AUTOMÁTICO)
 # ============================================================
 
-if os.environ.get("RENDER") or os.environ.get("ENABLE_EMAIL_WATCHER") == "1":
+def _iniciar_vigilante_se_apropriado():
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "false":
+        return
+    if os.environ.get("DISABLE_EMAIL_WATCHER") == "1":
+        print("[APP] Vigilante de e-mails DESATIVADO por configuracao.")
+        return
     try:
         import threading
         from services.email_watcher import loop_vigilante_email
-        _email_thread = threading.Thread(target=loop_vigilante_email, args=(15,), daemon=True)
+        _email_thread = threading.Thread(target=loop_vigilante_email, args=(10,), daemon=True)
         _email_thread.start()
-        print("[APP] Vigilante de e-mails iniciado em segundo plano (PRODUÇÃO)!")
+        print("[APP] Vigilante de e-mails iniciado em segundo plano!")
     except Exception as _e:
         print(f"[APP] Falha ao iniciar vigilante de e-mail: {_e}")
-else:
-    print("[APP] Vigilante de e-mails DESATIVADO em ambiente local. A nuvem (Render) processará os e-mails.")
+
+_iniciar_vigilante_se_apropriado()
 
 
 # ============================================================
@@ -1163,18 +1168,10 @@ if __name__ == "__main__":
     print("Upload: arquivos processados individualmente")
     print("=" * 70)
 
-
+    debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
     app.run(
-
         host="0.0.0.0",
-
-        port=int(
-            os.environ.get(
-                "PORT",
-                5000
-            )
-        ),
-
-        debug=True,
-
+        port=int(os.environ.get("PORT", 5000)),
+        debug=debug_mode,
+        use_reloader=False,
     )
