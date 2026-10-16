@@ -4554,20 +4554,7 @@ import pytesseract as _pytesseract_v11
 from pytesseract import Output as _Output_v11
 
 
-_V11_PALAVRAS_CACHE = {}
-
 def _v11_palavras_ocr(imagem, x_offset=0, y_offset=0, psm=11):
-    global _V11_PALAVRAS_CACHE
-    if imagem is None or imagem.size == 0:
-        return []
-
-    key = (imagem.shape, imagem.data.tobytes()[:128], int(psm), int(x_offset), int(y_offset))
-    if key in _V11_PALAVRAS_CACHE:
-        return list(_V11_PALAVRAS_CACHE[key])
-
-    if len(_V11_PALAVRAS_CACHE) > 50:
-        _V11_PALAVRAS_CACHE.clear()
-
     dados = _pytesseract_v11.image_to_data(
         imagem,
         lang="por+eng",
@@ -4721,51 +4708,27 @@ def _v11_ocr_celula(imagem, x1, y1, x2, y2, campo):
     crop = _cv2_v11.resize(
         crop,
         None,
-        fx=2.0,
-        fy=2.0,
+        fx=3.0,
+        fy=3.0,
         interpolation=_cv2_v11.INTER_CUBIC,
     )
 
     candidatos = []
 
     for psm in (7, 8, 11, 13):
-        try:
-            texto = _pytesseract_v11.image_to_string(
-                crop,
-                lang="por+eng",
-                config=f"--oem 3 --psm {psm}",
-                timeout=3,
-            ).strip()
-        except Exception:
-            continue
+        texto = _pytesseract_v11.image_to_string(
+            crop,
+            lang="por+eng",
+            config=f"--oem 3 --psm {psm}",
+        ).strip()
 
-        if not texto:
-            continue
-
-        candidatos.append(texto)
-
-        # Retorno imediato assim que reconhecer o campo esperado (economiza chamadas)
-        if campo == "area":
-            valor = _v10_area([texto])
-            if valor:
-                return valor
-        elif campo == "plantio":
-            valor = _v11_normalizar_data(texto)
-            if valor:
-                return valor
-        elif campo == "talhao":
-            valor = _v10_normalizar_talhao([texto])
-            if valor:
-                return valor
-        elif campo == "variedade":
-            valor = _v11_normalizar_variedade([texto])
-            if valor:
-                return valor
+        if texto:
+            candidatos.append(texto)
 
     if not candidatos:
         return ""
 
-    # Fallback se não retornou direto:
+    # Campo numérico: procura primeiro um valor que o normalizador reconheça.
     if campo == "area":
         for texto in candidatos:
             valor = _v10_area([texto])
@@ -5407,21 +5370,7 @@ def _v12_variedade(tokens):
     return txt
 
 
-_V12_DF_WORDS_CACHE = {}
-
 def _v12_dataframe_words(img, psm):
-    global _V12_DF_WORDS_CACHE
-    if img is None or img.size == 0:
-        return []
-
-    # Chave rápida baseada em dimensões e amostra de bytes da imagem
-    key = (img.shape, img.data.tobytes()[:128], int(psm))
-    if key in _V12_DF_WORDS_CACHE:
-        return _V12_DF_WORDS_CACHE[key]
-
-    if len(_V12_DF_WORDS_CACHE) > 50:
-        _V12_DF_WORDS_CACHE.clear()
-
     df = _pytesseract_v12.image_to_data(
         img,
         config=f"--psm {psm}",
@@ -5429,7 +5378,6 @@ def _v12_dataframe_words(img, psm):
         output_type=_Output_v12.DATAFRAME,
     )
     if df is None or len(df) == 0:
-        _V12_DF_WORDS_CACHE[key] = []
         return []
     df = df.dropna(subset=["text"]).copy()
     out = []
@@ -5449,7 +5397,6 @@ def _v12_dataframe_words(img, psm):
             "text": text,
             "conf": conf,
         })
-    _V12_DF_WORDS_CACHE[key] = out
     return out
 
 
@@ -6392,8 +6339,8 @@ def _v15_ocr_celula(img, x1, y1, x2, y2, campo):
     crop = _cv2_v12.resize(
         crop,
         None,
-        fx=2.0,
-        fy=2.0,
+        fx=5.0,
+        fy=5.0,
         interpolation=_cv2_v12.INTER_CUBIC,
     )
 
@@ -6686,35 +6633,14 @@ def _v15_extrair_grade_topo(caminho):
                     x1_celula = colunas[coluna] + 2
                     x2_celula = colunas[coluna + 1] - 2
 
-                    # Busca em memória nas palavras já extraídas pelo OCR da página (evita centenas de subprocessos)
-                    cel_words = [
-                        w["text"] for w in words
-                        if (x1_celula - 3 <= (w["x"] + w["w"] / 2) <= x2_celula + 3)
-                        and (y1 - 3 <= (w["y"] + w["h"] / 2) <= y2 + 3)
-                    ]
-                    texto_mem = " ".join(cel_words).strip()
-                    valor = ""
-                    if texto_mem:
-                        if campo == "talhao":
-                            valor = _v12_numero_talhao(texto_mem)
-                        elif campo == "variedade":
-                            valor = _v15_normalizar_variedade(texto_mem)
-                        elif campo == "area":
-                            valor = _v12_area(texto_mem)
-                        elif campo == "plantio":
-                            valor = _v12_plantio(texto_mem)
-                        else:
-                            valor = texto_mem
-
-                    if not valor:
-                        valor = _v15_ocr_celula(
-                            img,
-                            x1_celula,
-                            y1,
-                            x2_celula,
-                            y2,
-                            campo,
-                        )
+                    valor = _v15_ocr_celula(
+                        img,
+                        x1_celula,
+                        y1,
+                        x2_celula,
+                        y2,
+                        campo,
+                    )
 
                     # Para variedade, o PSM11 da página costuma preservar
                     # melhor códigos RB. Se ele encontrar um RB válido,
@@ -8182,57 +8108,12 @@ def _v18_extrair_tabelas_grade(caminho):
         if any(ign in texto_tabela_completo for ign in ["seringueira", "laranja", "eucal", "resumo de area", "resumo de área", "pasto", "bambu"]):
             continue
 
-        # OCR da tabela inteira em passagem única (reduz centenas de subprocessos tesseract para apenas 1)
-        try:
-            df_tabela = _pytesseract_v12.image_to_data(
-                crop,
-                lang="por+eng",
-                config="--psm 6",
-                output_type=_Output_v12.DATAFRAME
-            )
-        except Exception:
-            df_tabela = None
-
-        palavras_tabela = []
-        if df_tabela is not None and len(df_tabela) > 0:
-            df_clean = df_tabela.dropna(subset=["text"]).copy()
-            for _, row in df_clean.iterrows():
-                t = str(row.get("text", "")).strip()
-                if not t:
-                    continue
-                lx = int(row.get("left", 0))
-                ly = int(row.get("top", 0))
-                lw = int(row.get("width", 0))
-                lh = int(row.get("height", 0))
-                palavras_tabela.append({
-                    "texto": t,
-                    "x1": lx,
-                    "y1": ly,
-                    "x2": lx + lw,
-                    "y2": ly + lh,
-                    "cx": lx + lw / 2.0,
-                    "cy": ly + lh / 2.0,
-                })
-
-        def get_cell_text(x1, y1, x2, y2, margin=3):
-            enc = [
-                p for p in palavras_tabela
-                if (x1 - margin) <= p["cx"] <= (x2 + margin) and (y1 - margin) <= p["cy"] <= (y2 + margin)
-            ]
-            enc.sort(key=lambda p: (p["y1"], p["x1"]))
-            return " ".join(p["texto"] for p in enc).strip()
-
         headers = []
         for col_idx in range(len(clustered_x) - 1):
             x1, x2 = clustered_x[col_idx], clustered_x[col_idx + 1]
-            cell_txt = get_cell_text(x1, clustered_y[0], x2, clustered_y[1], margin=3).lower()
-            if not cell_txt:
-                cell = crop[clustered_y[0] : clustered_y[1], x1:x2]
-                inner = cell[3:-3, 3:-3] if cell.shape[0] > 6 and cell.shape[1] > 6 else cell
-                try:
-                    cell_txt = _pytesseract_v12.image_to_string(inner, lang="por+eng", config="--psm 6").strip().lower()
-                except Exception:
-                    cell_txt = ""
+            cell = crop[clustered_y[0] : clustered_y[1], x1:x2]
+            inner = cell[3:-3, 3:-3] if cell.shape[0] > 6 and cell.shape[1] > 6 else cell
+            cell_txt = _pytesseract_v12.image_to_string(inner, lang="por+eng", config="--psm 6").strip().lower()
             headers.append(cell_txt)
 
         talhao_cols = [i for i, h in enumerate(headers) if "talh" in h]
@@ -8268,47 +8149,50 @@ def _v18_extrair_tabelas_grade(caminho):
                 if y2 - y1 < 10:
                     continue
 
-                x_t1, x_t2 = clustered_x[col_talhao], clustered_x[col_talhao + 1]
-                t_txt = get_cell_text(x_t1, y1, x_t2, y2)
+                cell_t = crop[y1:y2, clustered_x[col_talhao] : clustered_x[col_talhao + 1]]
+                th, tw = cell_t.shape[:2]
+                inner_t = cell_t[3:-3, 4:-4] if th > 6 and tw > 8 else cell_t
+                
+                # Leitura normal da célula de talhão
+                try:
+                    t_txt = _pytesseract_v12.image_to_string(inner_t, config="--psm 6", timeout=8).strip()
+                except Exception:
+                    t_txt = ""
                 if not t_txt:
                     try:
-                        cell_t = crop[y1:y2, x_t1:x_t2]
-                        t_txt = _pytesseract_v12.image_to_string(cell_t, config="--psm 6", timeout=4).strip()
+                        t_txt = _pytesseract_v12.image_to_string(cell_t, config="--psm 6", timeout=8).strip()
                     except Exception:
                         t_txt = ""
 
                 v_txt = ""
                 if col_var is not None and col_var < len(clustered_x) - 1:
-                    x_v1, x_v2 = clustered_x[col_var], clustered_x[col_var + 1]
-                    v_txt = get_cell_text(x_v1, y1, x_v2, y2)
-                    if not v_txt:
-                        try:
-                            cell_v = crop[y1:y2, x_v1:x_v2]
-                            v_txt = _pytesseract_v12.image_to_string(cell_v, config="--psm 6", timeout=4).strip()
-                        except Exception:
-                            v_txt = ""
+                    cell_v = crop[y1:y2, clustered_x[col_var] : clustered_x[col_var + 1]]
+                    vh, vw = cell_v.shape[:2]
+                    inner_v = cell_v[3:-3, 6:-6] if vh > 6 and vw > 12 else cell_v
+                    try:
+                        v_txt = _pytesseract_v12.image_to_string(inner_v, config="--psm 6", timeout=8).strip()
+                    except Exception:
+                        v_txt = ""
 
                 a_txt = ""
                 if col_area is not None and col_area < len(clustered_x) - 1:
-                    x_a1, x_a2 = clustered_x[col_area], clustered_x[col_area + 1]
-                    a_txt = get_cell_text(x_a1, y1, x_a2, y2)
-                    if not a_txt:
-                        try:
-                            cell_a = crop[y1:y2, x_a1:x_a2]
-                            a_txt = _pytesseract_v12.image_to_string(cell_a, config="--psm 6", timeout=4).strip()
-                        except Exception:
-                            a_txt = ""
+                    cell_a = crop[y1:y2, clustered_x[col_area] : clustered_x[col_area + 1]]
+                    ah, aw = cell_a.shape[:2]
+                    inner_a = cell_a[3:-3, 6:-6] if ah > 6 and aw > 12 else cell_a
+                    try:
+                        a_txt = _pytesseract_v12.image_to_string(inner_a, config="--psm 6", timeout=8).strip()
+                    except Exception:
+                        a_txt = ""
 
                 p_txt = ""
                 if col_plantio is not None and col_plantio < len(clustered_x) - 1:
-                    x_p1, x_p2 = clustered_x[col_plantio], clustered_x[col_plantio + 1]
-                    p_txt = get_cell_text(x_p1, y1, x_p2, y2)
-                    if not p_txt:
-                        try:
-                            cell_p = crop[y1:y2, x_p1:x_p2]
-                            p_txt = _pytesseract_v12.image_to_string(cell_p, config="--psm 6", timeout=4).strip()
-                        except Exception:
-                            p_txt = ""
+                    cell_p = crop[y1:y2, clustered_x[col_plantio] : clustered_x[col_plantio + 1]]
+                    ph, pw = cell_p.shape[:2]
+                    inner_p = cell_p[3:-3, 6:-6] if ph > 6 and pw > 12 else cell_p
+                    try:
+                        p_txt = _pytesseract_v12.image_to_string(inner_p, config="--psm 6", timeout=8).strip()
+                    except Exception:
+                        p_txt = ""
 
                 data_norm = _v11_normalizar_data(p_txt)
                 if not data_norm:
@@ -9088,23 +8972,19 @@ def _v17_recuperar_celulas_tabela(processed, registros):
                 crop = _cv2_v11.resize(
                     crop,
                     None,
-                    fx=2.0,
-                    fy=2.0,
+                    fx=3.0,
+                    fy=3.0,
                     interpolation=_cv2_v11.INTER_CUBIC,
                 )
 
                 valor = ""
 
-                for psm in (7, 6):
-                    try:
-                        texto = _pytesseract_v11.image_to_string(
-                            crop,
-                            lang="por+eng",
-                            config=f"--oem 3 --psm {psm}",
-                            timeout=3,
-                        ).strip()
-                    except Exception:
-                        continue
+                for psm in (7, 11, 8):
+                    texto = _pytesseract_v11.image_to_string(
+                        crop,
+                        lang="por+eng",
+                        config=f"--oem 3 --psm {psm}",
+                    ).strip()
 
                     if not texto:
                         continue

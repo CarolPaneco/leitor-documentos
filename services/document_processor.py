@@ -40,7 +40,7 @@ from config import RESULT_FOLDER, CPU_THREADS
 # CONFIGURAÇÕES
 # ============================================================
 
-DPI_PADRAO = 180
+DPI_PADRAO = 250
 
 # Idioma principal.
 # O tesseract-ocr-por precisa estar instalado.
@@ -558,25 +558,33 @@ class DocumentProcessor:
         # OCR PRINCIPAL
         # ----------------------------------------------------
 
-        print("[OCR 1/2] Executando OCR com contraste (PSM 6)...")
+        print("[OCR 1/3] Executando OCR com contraste (PSM 6)...")
         dados_ocr = self._executar_ocr(
             imagem_contraste
         )
 
-        dados_ocr_threshold = []
-        if len(dados_ocr) < 80:
-            print("[OCR Fallback] Poucas palavras; executando threshold...")
-            imagem_threshold = cv2.threshold(
-                imagem_contraste,
-                180,
-                255,
-                cv2.THRESH_BINARY
-            )[1]
-            dados_ocr_threshold = self._executar_ocr(
-                imagem_threshold
-            )
+        # ----------------------------------------------------
+        # OCR COM THRESHOLD
+        # ----------------------------------------------------
 
-        print("[OCR 2/2] Executando OCR de layout global (PSM 3)...")
+        print("[OCR 2/3] Executando OCR com binarizacao/threshold...")
+        imagem_threshold = cv2.threshold(
+            imagem_contraste,
+            180,
+            255,
+            cv2.THRESH_BINARY
+        )[1]
+
+        dados_ocr_threshold = self._executar_ocr(
+            imagem_threshold
+        )
+
+        # ----------------------------------------------------
+        # OCR ALTERNATIVO PARA LAYOUTS DE MAPA/RODAPÉ
+        # ----------------------------------------------------
+        # PSM 3 costuma recuperar rótulos e valores lineares que o PSM 6
+        # perde, sem substituir o OCR principal usado pela tabela.
+        print("[OCR 3/3] Executando OCR de layout global (PSM 3)...")
         dados_ocr_global = self._executar_ocr(
             imagem_contraste,
             psm=3
