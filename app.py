@@ -528,6 +528,40 @@ def ping():
     }), 200
 
 
+@app.route(
+    "/status-watcher",
+    methods=["GET"]
+)
+def status_watcher():
+    import time
+    try:
+        from services.email_watcher import (
+            LOTES_PENDENTES,
+            EMAILS_PROCESSADOS_IDS,
+            LOGS_RECENTES,
+            JANELA_SILENCIO_SEGUNDOS,
+        )
+        lotes_info = {}
+        agora = time.time()
+        for k, v in LOTES_PENDENTES.items():
+            lotes_info[k] = {
+                "remetente": v.get("remetente"),
+                "qtd_docs": len(v.get("anexos", [])),
+                "docs": [a.get("nome") for a in v.get("anexos", [])],
+                "segundos_desde_ultimo": round(agora - v.get("ultimo_recebimento", agora), 1),
+                "segundos_restantes": max(0, int(JANELA_SILENCIO_SEGUNDOS - (agora - v.get("ultimo_recebimento", agora)))),
+            }
+        return jsonify({
+            "status": "ok",
+            "janela_silencio_segundos": JANELA_SILENCIO_SEGUNDOS,
+            "lotes_pendentes": lotes_info,
+            "total_emails_processados_sessao": len(EMAILS_PROCESSADOS_IDS),
+            "logs_recentes": LOGS_RECENTES[-40:],
+        }), 200
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+
 # ============================================================
 # PROCESSAR UM ARQUIVO
 # ============================================================
