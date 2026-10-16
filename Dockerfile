@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Configura usuário com UID 1000 para total compatibilidade com Hugging Face Spaces e Render
+# Configura usuário com UID 1000 para total compatibilidade com Render e Hugging Face
 RUN useradd -m -u 1000 user
 USER user
 ENV HOME=/home/user \
@@ -30,4 +30,5 @@ COPY --chown=user:user . .
 
 EXPOSE 7860
 
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-7860} --workers 1 --threads 4 --timeout 300 app:app"]
+# --capture-output e --enable-stdio-inheritance garantem logs em TEMPO REAL no console do Render
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-7860} --workers 1 --threads 4 --timeout 300 --capture-output --enable-stdio-inheritance app:app"]
