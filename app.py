@@ -534,6 +534,7 @@ def ping():
 )
 def status_watcher():
     import time
+    import html as pyhtml
     try:
         from services.email_watcher import (
             LOTES_PENDENTES,
@@ -551,15 +552,212 @@ def status_watcher():
                 "segundos_desde_ultimo": round(agora - v.get("ultimo_recebimento", agora), 1),
                 "segundos_restantes": max(0, int(JANELA_SILENCIO_SEGUNDOS - (agora - v.get("ultimo_recebimento", agora)))),
             }
-        return jsonify({
-            "status": "ok",
-            "janela_silencio_segundos": JANELA_SILENCIO_SEGUNDOS,
-            "lotes_pendentes": lotes_info,
-            "total_emails_processados_sessao": len(EMAILS_PROCESSADOS_IDS),
-            "logs_recentes": LOGS_RECENTES[-40:],
-        }), 200
+
+        # Suporte a JSON via query param ?json=1
+        if request.args.get("json") == "1" or request.headers.get("Accept") == "application/json":
+            return jsonify({
+                "status": "ok",
+                "janela_silencio_segundos": JANELA_SILENCIO_SEGUNDOS,
+                "lotes_pendentes": lotes_info,
+                "total_emails_processados_sessao": len(EMAILS_PROCESSADOS_IDS),
+                "logs_recentes": LOGS_RECENTES[-60:],
+            }), 200
+
+        # Renderiza página web limpa com UMA LINHA PARA CADA LOG
+        linhas_html = "".join(f"<div class='log-line'>{pyhtml.escape(log)}</div>" for log in LOGS_RECENTES[-60:])
+        if not linhas_html:
+            linhas_html = "<div class='log-empty'>Aguardando novos eventos...</div>"
+
+        lotes_html = ""
+        if lotes_info:
+            for rem, info in lotes_info.items():
+                docs_str = pyhtml.escape(", ".join(str(d) for d in info["docs"]))
+                lotes_html += f"""
+                <div class='lote-card'>
+                    <div><b>Remetente:</b> {pyhtml.escape(rem)}</div>
+                    <div><b>Documentos ({info['qtd_docs']}):</b> {docs_str}</div>
+                    <div style='margin-top: 5px;'><b>Tempo para fechar lote:</b> <span class='badge-time'>{info['segundos_restantes']}s</span></div>
+                </div>
+                """
+        else:
+            lotes_html = "<div class='text-muted'>Nenhum lote acumulando no momento (robô livre).</div>"
+
+        html_out = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Status do Robô Leitor</title>
+    <meta http-equiv="refresh" content="3">
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0f172a;
+            color: #f8fafc;
+            margin: 0;
+            padding: 24px;
+        }}
+        .container {{
+            max-width: 960px;
+            margin: 0 auto;
+        }}
+        .header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }}
+        .title {{
+            font-size: 22px;
+            font-weight: 700;
+            color: #38bdf8;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }}
+        .badge-status {{
+            background: #14532d;
+            color: #86efac;
+            border: 1px solid #22c55e;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }}
+        .cards-row {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }}
+        .card {{
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 16px;
+        }}
+        .card-label {{
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }}
+        .card-value {{
+            font-size: 22px;
+            font-weight: 700;
+            color: #f1f5f9;
+        }}
+        .section-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }}
+        .section-title {{
+            font-size: 16px;
+            font-weight: 600;
+            color: #cbd5e1;
+        }}
+        .pill-refresh {{
+            font-size: 12px;
+            color: #38bdf8;
+            background: #082f49;
+            border: 1px solid #0369a1;
+            padding: 4px 10px;
+            border-radius: 12px;
+        }}
+        .terminal {{
+            background: #020617;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 16px;
+            font-family: "Cascadia Code", "Consolas", "Courier New", monospace;
+            font-size: 13px;
+            max-height: 480px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }}
+        .log-line {{
+            white-space: pre-wrap;
+            word-break: break-word;
+            padding: 3px 0;
+            border-bottom: 1px solid #0f172a;
+            color: #cbd5e1;
+        }}
+        .log-line:last-child {{
+            border-bottom: none;
+            color: #4ade80;
+            font-weight: 700;
+        }}
+        .log-empty {{
+            color: #64748b;
+            font-style: italic;
+        }}
+        .lote-card {{
+            background: #1e293b;
+            border-left: 4px solid #f59e0b;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin-bottom: 12px;
+            font-size: 14px;
+            line-height: 1.5;
+        }}
+        .badge-time {{
+            color: #fbbf24;
+            font-weight: 700;
+        }}
+        .text-muted {{
+            color: #64748b;
+            font-size: 14px;
+            font-style: italic;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">🌾 Robô Leitor Agrícola</div>
+            <div class="badge-status">● Vigilante 100% Ativo</div>
+        </div>
+
+        <div class="cards-row">
+            <div class="card">
+                <div class="card-label">E-mails Processados</div>
+                <div class="card-value">{len(EMAILS_PROCESSADOS_IDS)}</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Janela de Silêncio</div>
+                <div class="card-value">{JANELA_SILENCIO_SEGUNDOS}s</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Caixa Monitorada</div>
+                <div class="card-value" style="font-size: 15px; word-break: break-all;">robo.agricola.leitor@gmail.com</div>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 24px;">
+            <div class="section-title" style="margin-bottom: 12px;">📬 Lotes de Documentos em Andamento</div>
+            {lotes_html}
+        </div>
+
+        <div>
+            <div class="section-header">
+                <div class="section-title">📜 Logs do Robô (Tempo Real)</div>
+                <div class="pill-refresh">Atualiza sozinho a cada 3s</div>
+            </div>
+            <div class="terminal">
+                {linhas_html}
+            </div>
+        </div>
+    </div>
+</body>
+</html>"""
+        return html_out, 200, {"Content-Type": "text/html; charset=utf-8"}
     except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+        return f"<h3>Erro no painel: {e}</h3>", 500
 
 
 # ============================================================
