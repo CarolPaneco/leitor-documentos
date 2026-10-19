@@ -415,24 +415,26 @@ def coletar_novos_emails():
                 continue
 
             # Adiciona ao lote pendente do remetente
+            agora_adicao = time.time()
             if remetente_email not in LOTES_PENDENTES:
                 LOTES_PENDENTES[remetente_email] = {
                     "remetente": remetente_email,
                     "assunto": assunto,
                     "anexos": list(anexos),
-                    "primeiro_recebimento": agora,
-                    "ultimo_recebimento": agora,
+                    "primeiro_recebimento": agora_adicao,
+                    "ultimo_recebimento": agora_adicao,
                     "qtd_emails": 1,
                 }
-                print(f"[EMAIL BATCH] Novo lote criado para {remetente_email} com {len(anexos)} anexo(s).")
+                print(f"[EMAIL BATCH] Novo lote criado para {remetente_email} com {len(anexos)} anexo(s). Aguardando {JANELA_SILENCIO_SEGUNDOS}s por novos arquivos...")
             else:
                 lote = LOTES_PENDENTES[remetente_email]
                 lote["anexos"].extend(anexos)
-                lote["ultimo_recebimento"] = agora
+                # REINICIA o cronômetro a partir deste último arquivo recebido!
+                lote["ultimo_recebimento"] = agora_adicao
                 lote["qtd_emails"] += 1
                 if not lote.get("assunto") and assunto:
                     lote["assunto"] = assunto
-                print(f"[EMAIL BATCH] +{len(anexos)} anexo(s) adicionados ao lote de {remetente_email}. Total: {len(lote['anexos'])} anexo(s) ({lote['qtd_emails']} e-mails).")
+                print(f"[EMAIL BATCH] +{len(anexos)} anexo(s) adicionados ao lote de {remetente_email}. Total: {len(lote['anexos'])} anexo(s). Cronometro reiniciado para {JANELA_SILENCIO_SEGUNDOS}s!")
 
         imap.logout()
 
