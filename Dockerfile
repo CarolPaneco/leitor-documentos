@@ -5,7 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=7860 \
     RENDER=true \
     ENABLE_EMAIL_WATCHER=1 \
-    JANELA_SILENCIO_SEGUNDOS=10
+    JANELA_SILENCIO_SEGUNDOS=5 \
+    OMP_THREAD_LIMIT=4
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \

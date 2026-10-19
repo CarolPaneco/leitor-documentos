@@ -51,9 +51,9 @@ ALLOWED_EXTENSIONS = {
 }
 
 # Configurações do lote (debounce / agrupamento inteligente)
-# Janela de silêncio: aguarda 10s sem novos e-mails do mesmo remetente antes de fechar o lote,
-# garantindo resposta rápida sem reter arquivos além do necessário.
-JANELA_SILENCIO_SEGUNDOS = int(os.environ.get("JANELA_SILENCIO_SEGUNDOS", 10))
+# Janela de silêncio: aguarda 5s sem novos e-mails do mesmo remetente antes de fechar o lote,
+# garantindo resposta quase imediata sem reter arquivos além do necessário.
+JANELA_SILENCIO_SEGUNDOS = int(os.environ.get("JANELA_SILENCIO_SEGUNDOS", 5))
 # Janela máxima: se novos e-mails continuarem chegando sem parar, após 300s (5 min)
 # fechamos o lote atual para não reter indefinidamente os documentos já recebidos.
 JANELA_MAXIMA_SEGUNDOS = int(os.environ.get("JANELA_MAXIMA_SEGUNDOS", 300))
@@ -545,7 +545,7 @@ def processar_lotes_prontos():
             shutil.rmtree(pasta_temp, ignore_errors=True)
 
 
-def loop_vigilante_email(intervalo_segundos=10):
+def loop_vigilante_email(intervalo_segundos=5):
     print(f"[EMAIL WORKER] Vigilante de e-mail iniciado para {GMAIL_USER} (intervalo: {intervalo_segundos}s, janela silêncio: {JANELA_SILENCIO_SEGUNDOS}s)")
     ciclo = 0
     while True:
