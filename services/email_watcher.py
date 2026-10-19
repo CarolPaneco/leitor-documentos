@@ -21,8 +21,11 @@ _builtin_print = print
 def print(*args, **kwargs):
     kwargs.setdefault("flush", True)
     try:
+        from datetime import timezone, timedelta
+        fuso_br = timezone(timedelta(hours=-3))
+        hora_br = datetime.now(fuso_br).strftime("%H:%M:%S")
         msg = " ".join(str(a) for a in args)
-        LOGS_RECENTES.append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+        LOGS_RECENTES.append(f"[{hora_br}] {msg}")
         if len(LOGS_RECENTES) > 100:
             LOGS_RECENTES.pop(0)
     except Exception:
@@ -327,19 +330,12 @@ def coletar_novos_emails():
         imap.login(GMAIL_USER, GMAIL_PASS)
         imap.select("INBOX")
 
+        # Busca EXCLUSIVAMENTE e-mails novos não lidos (UNSEEN)
+        # Nunca puxa histórico antigo para não misturar envios
         ids_candidatos = []
         status, mensagens = imap.search(None, "UNSEEN")
         if status == "OK" and mensagens[0]:
             ids_candidatos.extend(mensagens[0].split())
-
-        # Se não houver novos UNSEEN, verifica os últimos 15 e-mails da caixa
-        # para garantir que nenhum PDF seja perdido caso o e-mail tenha sido aberto no navegador
-        status_all, all_msgs = imap.search(None, "ALL")
-        if status_all == "OK" and all_msgs[0]:
-            todos = all_msgs[0].split()
-            for m_id in todos[-15:]:
-                if m_id not in ids_candidatos:
-                    ids_candidatos.append(m_id)
 
         # Filtra apenas e-mails ainda não processados nesta sessão
         ids = [m for m in ids_candidatos if m.decode() not in EMAILS_PROCESSADOS_IDS]
@@ -347,11 +343,17 @@ def coletar_novos_emails():
             imap.logout()
             return
 
-        print(f"[EMAIL INGEST] {len(ids)} novo(s) e-mail(s) a analisar!")
+        print(f"[EMAIL INGEST] {len(ids)} novo(s) e-mail(s) recebido(s) agora!")
         agora = time.time()
 
         for msg_id in ids:
             EMAILS_PROCESSADOS_IDS.add(msg_id.decode())
+            # Marca o e-mail como LIDO no Gmail para nunca mais ser reprocessado
+            try:
+                imap.store(msg_id, "+FLAGS", "\\Seen")
+            except Exception:
+                pass
+
             status_f, dados_msg = imap.fetch(msg_id, "(RFC822)")
             if status_f != "OK" or not dados_msg:
                 continue
