@@ -54,9 +54,9 @@ ALLOWED_EXTENSIONS = {
 }
 
 # Configurações do lote (debounce / agrupamento inteligente)
-# Janela de silêncio: aguarda 5s sem novos e-mails do mesmo remetente antes de fechar o lote,
-# garantindo resposta quase imediata sem reter arquivos além do necessário.
-JANELA_SILENCIO_SEGUNDOS = int(os.environ.get("JANELA_SILENCIO_SEGUNDOS", 5))
+# Janela de silêncio: aguarda 15s sem novos e-mails do mesmo remetente antes de fechar o lote,
+# garantindo tempo suficiente para envio de múltiplos anexos/e-mails.
+JANELA_SILENCIO_SEGUNDOS = int(os.environ.get("JANELA_SILENCIO_SEGUNDOS", 15))
 # Janela máxima: se novos e-mails continuarem chegando sem parar, após 300s (5 min)
 # fechamos o lote atual para não reter indefinidamente os documentos já recebidos.
 JANELA_MAXIMA_SEGUNDOS = int(os.environ.get("JANELA_MAXIMA_SEGUNDOS", 300))
