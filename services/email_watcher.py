@@ -67,8 +67,31 @@ JANELA_MAXIMA_SEGUNDOS = int(os.environ.get("JANELA_MAXIMA_SEGUNDOS", 300))
 # Chave: remetente_email (minúsculas)
 LOTES_PENDENTES = {}
 
-# Guarda IDs de e-mails já processados nesta sessão para não reprocessar
-EMAILS_PROCESSADOS_IDS = set()
+# Arquivo para persistir Message-IDs já processados (evita reprocessamento ao reiniciar)
+HISTORICO_PATH = os.path.join(os.path.dirname(__file__), '..', 'database', 'emails_processados.txt')
+
+def _carregar_emails_processados():
+    ids = set()
+    try:
+        if os.path.exists(HISTORICO_PATH):
+            with open(HISTORICO_PATH, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        ids.add(line)
+    except Exception:
+        pass
+    return ids
+
+def _salvar_email_processado(identificador):
+    try:
+        os.makedirs(os.path.dirname(HISTORICO_PATH), exist_ok=True)
+        with open(HISTORICO_PATH, 'a', encoding='utf-8') as f:
+            f.write(f'{identificador}\n')
+    except Exception:
+        pass
+
+EMAILS_PROCESSADOS_IDS = _carregar_emails_processados()
 
 
 def _decodificar_cabecalho(texto):
@@ -324,44 +347,90 @@ def enviar_resposta_email(destinatario, assunto_original, linhas, docs_info, err
 
 def coletar_novos_emails():
     """
-    Busca novos e-mails não lidos na caixa de entrada do Gmail e adiciona os anexos
-    ao lote pendente do remetente.
+    Busca novos e-mails na caixa de entrada do Gmail.
+    Garante que multiplos arquivos (enviados juntos no mesmo e-mail OU enviados
+    em e-mails separados agrupados na mesma conversa pelo Gmail) sejam 100% detectados.
     """
     try:
         imap = imaplib.IMAP4_SSL("imap.gmail.com")
         imap.login(GMAIL_USER, GMAIL_PASS)
         imap.select("INBOX")
 
-        # Busca EXCLUSIVAMENTE e-mails novos não lidos (UNSEEN)
-        # Nunca puxa histórico antigo para não misturar envios
         ids_candidatos = []
-        status, mensagens = imap.search(None, "UNSEEN")
-        if status == "OK" and mensagens[0]:
-            ids_candidatos.extend(mensagens[0].split())
 
-        # Filtra apenas e-mails ainda não processados nesta sessão
-        ids = [m for m in ids_candidatos if m.decode() not in EMAILS_PROCESSADOS_IDS]
-        if not ids:
+        # 1. Busca e-mails nao lidos (UNSEEN)
+        status_unseen, msgs_unseen = imap.search(None, "UNSEEN")
+        if status_unseen == "OK" and msgs_unseen[0]:
+            for mid in msgs_unseen[0].split():
+                if mid not in ids_candidatos:
+                    ids_candidatos.append(mid)
+
+        # 2. Busca os ultimos 15 e-mails da caixa (para capturar e-mails agrupados em conversa)
+        status_all, msgs_all = imap.search(None, "ALL")
+        if status_all == "OK" and msgs_all[0]:
+            for mid in msgs_all[0].split()[-15:]:
+                if mid not in ids_candidatos:
+                    ids_candidatos.append(mid)
+
+        if not ids_candidatos:
             imap.logout()
             return
 
-        print(f"[EMAIL INGEST] {len(ids)} novo(s) e-mail(s) recebido(s) agora!")
         agora = time.time()
 
-        for msg_id in ids:
-            EMAILS_PROCESSADOS_IDS.add(msg_id.decode())
-            # Marca o e-mail como LIDO no Gmail para nunca mais ser reprocessado
-            try:
-                imap.store(msg_id, "+FLAGS", "\\Seen")
-            except Exception:
-                pass
+        for msg_id in ids_candidatos:
+            m_str = msg_id.decode()
 
+            # Pega cabecalho basico primeiro para validar Message-ID e data sem baixar o corpo inteiro
+            status_h, dados_h = imap.fetch(msg_id, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE)])")
+            if status_h != "OK" or not dados_h:
+                continue
+
+            hdr_text = dados_h[0][1]
+            hdr_msg = email.message_from_bytes(hdr_text)
+            message_id_hdr = str(hdr_msg.get("Message-ID") or "").strip()
+
+            # Se este e-mail ja foi processado nesta sessao ou historico, pula!
+            if message_id_hdr and message_id_hdr in EMAILS_PROCESSADOS_IDS:
+                continue
+            if m_str in EMAILS_PROCESSADOS_IDS:
+                continue
+
+            # Se o e-mail tem mais de 2 horas (7200 segundos), considera antigo e nao reprocessa
+            date_raw = hdr_msg.get("Date")
+            if date_raw:
+                try:
+                    from email.utils import parsedate_to_datetime
+                    dt_email = parsedate_to_datetime(date_raw)
+                    ts_email = dt_email.timestamp()
+                    if (agora - ts_email) > 7200:
+                        EMAILS_PROCESSADOS_IDS.add(m_str)
+                        if message_id_hdr:
+                            EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
+                            _salvar_email_processado(message_id_hdr)
+                        continue
+                except Exception:
+                    pass
+
+            # Baixa o e-mail completo para extrair anexos
             status_f, dados_msg = imap.fetch(msg_id, "(RFC822)")
             if status_f != "OK" or not dados_msg:
                 continue
 
             raw_email = dados_msg[0][1]
             msg = email.message_from_bytes(raw_email)
+
+            # Registra como processado para nunca mais repetir
+            EMAILS_PROCESSADOS_IDS.add(m_str)
+            if message_id_hdr:
+                EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
+                _salvar_email_processado(message_id_hdr)
+
+            # Marca como lido no Gmail
+            try:
+                imap.store(msg_id, "+FLAGS", "\\Seen")
+            except Exception:
+                pass
 
             remetente_raw = msg.get("From", "")
             remetente = _decodificar_cabecalho(remetente_raw)
@@ -371,52 +440,45 @@ def coletar_novos_emails():
                 remetente_email = remetente.strip().lower()
 
             assunto = _decodificar_cabecalho(msg.get("Subject", ""))
-            print(f"[EMAIL INGEST] Lendo de: {remetente_email} | Assunto: {assunto}")
 
-            # Ignora alertas automáticos de sistema, no-reply e provedores
-            ignorar_remetente = any(k in remetente_email for k in [
-                "brevo.com", "google.com", "noreply", "no-reply", "account-alerts",
-                "notification", "mailer-daemon", "postmaster"
-            ])
-            if ignorar_remetente:
-                print(f"[EMAIL INGEST] Ignorando e-mail automático de sistema: {remetente_email}")
+            # Ignora alertas de sistema
+            if any(k in remetente_email for k in ["brevo.com", "google.com", "noreply", "no-reply", "mailer-daemon", "postmaster"]):
                 continue
 
-            # Coleta anexos deste e-mail
+            # Extrai TODOS os anexos (suporta multiplos arquivos no mesmo e-mail e formatos inline)
             anexos = []
             for part in msg.walk():
                 if part.get_content_maintype() == "multipart":
                     continue
-                if part.get("Content-Disposition") is None:
-                    continue
 
                 filename_raw = part.get_filename()
+                content_type = part.get_content_type().lower()
+
+                if not filename_raw:
+                    cd = part.get("Content-Disposition") or ""
+                    if "attachment" in cd.lower() or content_type in ["application/pdf", "image/png", "image/jpeg", "image/tiff"]:
+                        ext_def = ".pdf" if "pdf" in content_type else ".png"
+                        filename_raw = f"anexo_{len(anexos) + 1}{ext_def}"
+
                 if not filename_raw:
                     continue
 
                 nome_arquivo = _decodificar_cabecalho(filename_raw)
                 ext = os.path.splitext(nome_arquivo)[1].lower()
-                if ext in ALLOWED_EXTENSIONS:
+                if ext in ALLOWED_EXTENSIONS or content_type in ["application/pdf", "image/png", "image/jpeg", "image/tiff"]:
                     payload = part.get_payload(decode=True)
                     if payload:
                         anexos.append({
                             "nome": nome_arquivo,
-                            "ext": ext,
+                            "ext": ext if ext in ALLOWED_EXTENSIONS else ".pdf",
                             "payload": payload,
                         })
 
             if not anexos:
-                print(f"[EMAIL INGEST] Sem anexos válidos no e-mail de {remetente_email}")
-                enviar_resposta_email(
-                    remetente_email,
-                    assunto,
-                    [],
-                    [],
-                    erro_msg="Nenhum arquivo PDF ou imagem válido foi encontrado em anexo."
-                )
                 continue
 
-            # Adiciona ao lote pendente do remetente
+            print(f"[EMAIL INGEST] Lendo de: {remetente_email} | Assunto: {assunto} | Anexos encontrados: {len(anexos)}")
+
             agora_adicao = time.time()
             if remetente_email not in LOTES_PENDENTES:
                 LOTES_PENDENTES[remetente_email] = {
@@ -431,12 +493,12 @@ def coletar_novos_emails():
             else:
                 lote = LOTES_PENDENTES[remetente_email]
                 lote["anexos"].extend(anexos)
-                # REINICIA o cronômetro a partir deste último arquivo recebido!
+                # REINICIA o cronometro a partir do ultimo arquivo/e-mail adicionado
                 lote["ultimo_recebimento"] = agora_adicao
                 lote["qtd_emails"] += 1
                 if not lote.get("assunto") and assunto:
                     lote["assunto"] = assunto
-                print(f"[EMAIL BATCH] +{len(anexos)} anexo(s) adicionados ao lote de {remetente_email}. Total: {len(lote['anexos'])} anexo(s). Cronometro reiniciado para {JANELA_SILENCIO_SEGUNDOS}s!")
+                print(f"[EMAIL BATCH] +{len(anexos)} anexo(s) adicionados ao lote de {remetente_email}. Total: {len(lote['anexos'])} anexo(s) ({lote['qtd_emails']} e-mails). Cronometro reiniciado para {JANELA_SILENCIO_SEGUNDOS}s!")
 
         imap.logout()
 
