@@ -21,7 +21,17 @@ import cv2
 import numpy as np
 import pymupdf
 import pytesseract
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# Configura o executavel do Tesseract caso esteja em local padrao do Windows.
+# No Linux (Render/Docker), o binario tesseract ja esta no PATH (/usr/bin/tesseract).
+for _caminho_tess in [
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "tesseract", "tesseract.exe"),
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tesseract", "tesseract.exe"),
+]:
+    if os.path.exists(_caminho_tess):
+        pytesseract.pytesseract.tesseract_cmd = _caminho_tess
+        break
 
 from pytesseract import Output
 

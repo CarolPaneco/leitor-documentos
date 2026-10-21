@@ -574,6 +574,9 @@ def processar_lotes_prontos():
                     meta = doc.get("metadata") or {}
                     bloco_doc = str(meta.get("bloco") or doc.get("bloco") or "").strip()
                     prop_doc = str(meta.get("propriedade") or doc.get("propriedade") or "").strip()
+                else:
+                    err_msg = resultado_ocr.get("erro", "Falha desconhecida no OCR")
+                    print(f"[EXTRACAO ERRO] Falha ao processar {nome_arq}: {err_msg}")
 
                 docs_info.append({
                     "nome": nome_arq,
