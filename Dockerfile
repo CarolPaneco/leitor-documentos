@@ -31,5 +31,5 @@ COPY --chown=user:user . .
 
 EXPOSE 7860
 
-# --capture-output e --enable-stdio-inheritance garantem logs em TEMPO REAL no console do Render
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-7860} --workers 1 --threads 4 --timeout 300 --capture-output --enable-stdio-inheritance app:app"]
+# Executa com python -m gunicorn para garantir que o binário seja encontrado em qualquer PATH
+CMD ["sh", "-c", "python -m gunicorn --bind 0.0.0.0:${PORT:-7860} --workers 1 --threads 4 --timeout 300 --capture-output --enable-stdio-inheritance app:app"]
