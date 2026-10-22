@@ -26,7 +26,7 @@ def print(*args, **kwargs):
         hora_br = datetime.now(fuso_br).strftime("%H:%M:%S")
         msg = " ".join(str(a) for a in args)
         LOGS_RECENTES.append(f"[{hora_br}] {msg}")
-        if len(LOGS_RECENTES) > 100:
+        if len(LOGS_RECENTES) > 300:
             LOGS_RECENTES.pop(0)
     except Exception:
         pass
