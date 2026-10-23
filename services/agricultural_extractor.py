@@ -7482,7 +7482,7 @@ def _v16_recuperar_metadados(words):
     def mesma_linha(a, b, tol=20):
         return abs(_cy(a) - _cy(b)) <= tol
 
-    def linha_seguinte(ancora, max_y=90, max_x_offset=380):
+    def linha_seguinte(ancora, max_y=90, max_x_offset=620):
         """
         Pega a primeira linha útil abaixo do rótulo, usando a mesma
         coluna de início. Isso evita capturar textos do mapa ou colunas ao lado.
@@ -7499,7 +7499,7 @@ def _v16_recuperar_metadados(words):
             wy = _cy(w)
             wx = _word_x(w)
 
-            if wy <= ay + 8 or wy > ay + max_y:
+            if wy <= ay + 6 or wy > ay + max_y:
                 continue
 
             # O valor do quadro começa praticamente na mesma coluna
@@ -7512,11 +7512,15 @@ def _v16_recuperar_metadados(words):
         if not candidatos:
             return []
 
-        y_ref = min(_cy(w) for w in candidatos)
+        cands_uteis = [w for w in candidatos if len(normalizar(_word_text(w))) >= 2]
+        if cands_uteis:
+            y_ref = min(_cy(w) for w in cands_uteis)
+        else:
+            y_ref = min(_cy(w) for w in candidatos)
 
         linha = [
             w for w in candidatos
-            if abs(_cy(w) - y_ref) <= 12
+            if abs(_cy(w) - y_ref) <= 22
         ]
 
         return sorted(
@@ -7562,6 +7566,7 @@ def _v16_recuperar_metadados(words):
     def limpar_valor(v):
         v = normalizar(v)
         v = re.sub(r"^[|:;,\-]+", "", v)
+        v = re.sub(r"\s+[|l!]\s*$", " I", v)
         v = re.sub(r"[|:;]+$", "", v)
         return normalizar(v)
 
@@ -7647,11 +7652,10 @@ def _v16_recuperar_metadados(words):
     if rotulo_prop:
         linha = linha_seguinte(
             rotulo_prop,
-            max_y=70,
-            max_x_offset=360,
+            max_y=75,
+            max_x_offset=620,
         )
 
-        # Remove ruídos óbvios e nunca atravessa outro rótulo.
         linha = [
             w for w in linha
             if chave(_word_text(w)) not in {
@@ -7667,22 +7671,28 @@ def _v16_recuperar_metadados(words):
             }
         ]
 
-        # Desduplica palavras sobrepostas horizontalmente pelo OCR
         cands_p = []
         for w in linha:
             txt = normalizar(_word_text(w)).strip(" |:;,-")
-            if txt:
-                cands_p.append((txt, float(w.get("confianca", 0) or 0), _word_x(w)))
+            if txt and len(txt) >= 2:
+                largura = float(w.get("largura") or (w.get("box", [0, 0, 0, 0])[2] - w.get("box", [0, 0, 0, 0])[0]) or 35)
+                cands_p.append((txt, float(w.get("confianca", 0) or 0), _word_x(w), largura))
         cands_p.sort(key=lambda c: (c[2], -c[1]))
         desdup_p = []
         for c in cands_p:
-            if not desdup_p or abs(c[2] - desdup_p[-1][2]) > 25:
+            if not desdup_p:
                 desdup_p.append(c)
-            elif c[1] > desdup_p[-1][1]:
-                desdup_p[-1] = c
+            else:
+                prev_x = desdup_p[-1][2]
+                prev_w = desdup_p[-1][3]
+                curr_x = c[2]
+                if curr_x < prev_x + prev_w - 6 or abs(curr_x - prev_x) < 25:
+                    if c[1] > desdup_p[-1][1]:
+                        desdup_p[-1] = c
+                else:
+                    desdup_p.append(c)
         desdup_p.sort(key=lambda c: c[2])
 
-        # Deduplica palavras consecutivas repetidas (ex: Agropastoril Agropastoril -> Agropastoril)
         limpas_prop = []
         for c in desdup_p:
             p = c[0]
@@ -7690,10 +7700,8 @@ def _v16_recuperar_metadados(words):
                 limpas_prop.append(p)
 
         valor = limpar_valor(" ".join(limpas_prop))
-        # Corta se encontrar menção a área, carreador ou percentual de carreador
-        valor = re.split(r"\b(?:[AÁ]rea|Carreador|Status|\d+,\d+%)\b", valor, flags=re.I)[0].strip(" |:;,-")
+        valor = re.split(r"\b(?:[AÁaá]rea|Carreador|Status|\d+,\d+%)\b", valor, flags=re.I)[0].strip(" |:;,-")
 
-        # Nome pode conter "/", "e", "Outros", etc.
         if len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", valor)) >= 2:
             resultado["proprietario"] = valor
 
@@ -7701,14 +7709,13 @@ def _v16_recuperar_metadados(words):
     # PROPRIEDADE
     # ------------------------------------------------------------
     rotulo_propriedade = procurar_rotulo(
-        lambda k: k == "propriedade"
+        lambda k: k in {"propriedade", "propriedade:"}
     )
 
     if rotulo_propriedade:
         ax = _word_x(rotulo_propriedade)
         ay = _cy(rotulo_propriedade)
 
-        # Candidatos na MESMA linha do rótulo
         linha_mesma = [
             w for w in ordenadas
             if abs(_cy(w) - ay) <= 18
@@ -7727,8 +7734,8 @@ def _v16_recuperar_metadados(words):
 
         linha = linha_seguinte(
             rotulo_propriedade,
-            max_y=70,
-            max_x_offset=380,
+            max_y=75,
+            max_x_offset=620,
         )
 
         linha = [
@@ -7747,21 +7754,30 @@ def _v16_recuperar_metadados(words):
         )
 
         valor = ""
-        if re.search(r"\b(?:Fazenda|S[ií]tio)\b", valor_mesma, re.I):
+        if valor_mesma and valor_abaixo:
+            if re.fullmatch(r"(?:Fazenda|S[ií]tio)", valor_mesma.strip(), re.I):
+                valor = f"{valor_mesma.strip()} {valor_abaixo.strip()}"
+            elif re.search(r"\b(?:Fazenda|S[ií]tio)\b", valor_mesma, re.I):
+                valor = valor_mesma
+            elif re.search(r"\b(?:Fazenda|S[ií]tio)\b", valor_abaixo, re.I):
+                valor = valor_abaixo
+            else:
+                valor = valor_abaixo or valor_mesma
+        elif valor_mesma:
             valor = valor_mesma
-        elif re.search(r"\b(?:Fazenda|S[ií]tio)\b", valor_abaixo, re.I):
-            valor = valor_abaixo
         else:
-            valor = valor_abaixo or valor_mesma
+            valor = valor_abaixo
 
         if valor:
             m_prop = re.search(r"((?:Fazenda|S[ií]tio)\b.*)", valor, re.I)
             if m_prop:
                 valor = m_prop.group(1).strip()
             valor = re.split(r"\s+\d{1,3}[.,]\d{1,2}\b", valor, maxsplit=1)[0].strip()
+            valor = re.sub(r"\s+[|l!]\s*$", " I", valor).strip(" :;,-")
             resultado["propriedade"] = valor
 
     # ------------------------------------------------------------
+
     # MUNICÍPIO
     # ------------------------------------------------------------
     rotulo_mun = procurar_rotulo(
@@ -7986,9 +8002,13 @@ def _v18_extrair_tabelas_grade(caminho):
     da página (topo, meio ou rodapé), isolando cada célula e realizando OCR direto.
     """
     import numpy as np
-
     import os
+
     tess_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if not os.path.exists(tess_path):
+        local_tess = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "tesseract", "tesseract.exe")
+        if os.path.exists(local_tess):
+            tess_path = local_tess
     if os.path.exists(tess_path):
         _pytesseract_v12.pytesseract.tesseract_cmd = tess_path
 
@@ -8017,7 +8037,42 @@ def _v18_extrair_tabelas_grade(caminho):
         if bw_box > 250 and bh_box > 80 and bw_box < w_img * 0.70 and bh_box < h_img * 0.70 and (bw_box * bh_box) < (w_img * h_img * 0.35):
             tabelas_encontradas.append((bx, by, bw_box, bh_box))
 
-    # Desduplicação de caixas de contorno concêntricas ou sobrepostas (NMS com IoU real)
+    # Células individuais de grade agrupadas (para tabelas que encostam nas bordas da página)
+    celulas = []
+    for c in cnts:
+        cbx, cby, cbw, cbh = _cv2_v12.boundingRect(c)
+        if 50 < cbw < 450 and 16 < cbh < 85:
+            celulas.append((cbx, cby, cbw, cbh))
+
+    visitados = set()
+    for i, c1 in enumerate(celulas):
+        if i in visitados:
+            continue
+        grupo = [c1]
+        visitados.add(i)
+        fila = [c1]
+        while fila:
+            curr = fila.pop(0)
+            cx1, cy1, cw1, ch1 = curr
+            for j, c2 in enumerate(celulas):
+                if j not in visitados:
+                    x2, y2, w2, h2 = c2
+                    dx = max(0, max(cx1, x2) - min(cx1 + cw1, x2 + w2))
+                    dy = max(0, max(cy1, y2) - min(cy1 + ch1, y2 + h2))
+                    if dx <= 14 and dy <= 14:
+                        visitados.add(j)
+                        grupo.append(c2)
+                        fila.append(c2)
+        if len(grupo) >= 6:
+            gx1 = min(c[0] for c in grupo)
+            gy1 = min(c[1] for c in grupo)
+            gx2 = max(c[0] + c[2] for c in grupo)
+            gy2 = max(c[1] + c[3] for c in grupo)
+            gw = gx2 - gx1
+            gh = gy2 - gy1
+            if gw > 250 and gh > 80 and gw < w_img * 0.70 and gh < h_img * 0.70 and (gw * gh) < (w_img * h_img * 0.35):
+                tabelas_encontradas.append((gx1, gy1, gw, gh))
+
     tabelas_ordenadas = sorted(tabelas_encontradas, key=lambda b: b[2] * b[3], reverse=True)
     tabelas_desduplicadas = []
     for b in tabelas_ordenadas:
@@ -8078,13 +8133,14 @@ def _v18_extrair_tabelas_grade(caminho):
         header_row = crop[clustered_y[0] : clustered_y[1], :]
         h_txt = _pytesseract_v12.image_to_string(header_row, lang="por+eng", config="--psm 6").lower()
         if "talh" not in h_txt:
-            continue
+            above_crop = img[max(0, by - 45) : by, bx : bx + bw_box]
+            above_txt = _pytesseract_v12.image_to_string(above_crop, lang="por+eng", config="--psm 6").lower() if above_crop.size > 0 else ""
+            if "talh" not in above_txt:
+                continue
 
-        # Verifica se é uma tabela de outra cultura (Laranja, Seringueira, Eucalipto, etc.) ou de resumo de áreas
         y_above = max(0, by - 45)
         above_crop = img[y_above:by, bx : bx + bw_box]
         above_txt = _pytesseract_v12.image_to_string(above_crop, lang="por+eng", config="--psm 6").lower() if above_crop.size > 0 else ""
-        
         texto_tabela_completo = h_txt + " " + above_txt
         if any(ign in texto_tabela_completo for ign in ["seringueira", "laranja", "eucal", "resumo de area", "resumo de área", "pasto", "bambu"]):
             continue
@@ -8104,7 +8160,6 @@ def _v18_extrair_tabelas_grade(caminho):
         sub_tabelas = []
         for i, start_col in enumerate(talhao_cols):
             end_col = talhao_cols[i + 1] if i + 1 < len(talhao_cols) else len(headers)
-            # Se a sub-tabela tiver menos de 3 colunas (ex: apenas Talhão e Área), ela NÃO tem variedade!
             if end_col - start_col < 3:
                 continue
 
@@ -8113,7 +8168,6 @@ def _v18_extrair_tabelas_grade(caminho):
             col_area = next((c for c in range(start_col, end_col) if any(k in headers[c] for k in ["area", "área", "ha", "alq", "superf"])), start_col + 2 if end_col > start_col + 2 else None)
             col_plantio = next((c for c in range(start_col, end_col) if "plan" in headers[c] or "data" in headers[c]), start_col + 3 if end_col > start_col + 3 else None)
             
-            # Se col_var for igual a col_area, significa que não há coluna de variedade real!
             if col_var is not None and col_var == col_area:
                 continue
             if col_var is None or col_area is None:
@@ -8134,7 +8188,6 @@ def _v18_extrair_tabelas_grade(caminho):
                 th, tw = cell_t.shape[:2]
                 inner_t = cell_t[3:-3, 4:-4] if th > 6 and tw > 8 else cell_t
                 
-                # Leitura normal da célula de talhão
                 t_txt = _pytesseract_v12.image_to_string(inner_t, config="--psm 6").strip()
                 if not t_txt:
                     t_txt = _pytesseract_v12.image_to_string(cell_t, config="--psm 6").strip()
@@ -8175,49 +8228,18 @@ def _v18_extrair_tabelas_grade(caminho):
                 area_norm = _v17_normalizar_area_ocr(a_txt)
                 var_norm = _v11_normalizar_variedade(v_txt.split()) or v_txt
 
-                # Se a variedade for um número puro ou float (ex: 6.04, 2.32, 434), é uma área e NUNCA variedade!
                 clean_v = var_norm.replace(",", ".").rstrip(".").strip()
                 if clean_v and re.fullmatch(r"\d+(?:\.\d+)?", clean_v):
                     var_norm = ""
 
-                # Tratamento de células mescladas verticalmente ou talhão repetido:
-                # Importante: só herda ou combina se a linha tiver uma variedade legítima!
-                # Linha de total tem apenas a área total, sem variedade nem talhão.
                 if not talhao_num and (var_norm or v_txt):
                     if carry_talhao:
                         talhao_num = carry_talhao
                         carry_talhao = ""
-                    elif r + 2 < len(clustered_y):
-                        # Tenta ler a célula combinada (esta linha + próxima)
-                        comb = crop[y1 : clustered_y[r + 2], clustered_x[col_talhao] : clustered_x[col_talhao + 1]]
-                        sub_comb = comb[:, 3:-3] if comb.shape[1] > 6 else comb
-                        cands = []
-                        for c_img in [sub_comb, comb]:
-                            txt_c = _pytesseract_v12.image_to_string(
-                                c_img, config="--psm 6 -c tessedit_char_whitelist=0123456789"
-                            ).strip()
-                            if txt_c and txt_c.isdigit() and int(txt_c) < 1000:
-                                cands.append(txt_c)
-                            txt_c_raw = _pytesseract_v12.image_to_string(c_img, config="--psm 6").strip()
-                            m_comb = re.search(r"\b\d{1,4}\b", txt_c_raw)
-                            if m_comb and int(m_comb.group(0)) < 1000:
-                                cands.append(m_comb.group(0))
+                    elif registros_sub and registros_sub[-1].get("talhao", "").isdigit():
+                        talhao_num = str(int(registros_sub[-1]["talhao"]) + 1)
 
-                        if cands:
-                            prev_n = int(registros_sub[-1]["talhao"]) if registros_sub and registros_sub[-1].get("talhao", "").isdigit() else None
-                            if prev_n is not None:
-                                best = next((c for c in cands if int(c) in (prev_n, prev_n + 1)), None)
-                                if best is None:
-                                    best = next((c for c in cands if int(c) >= prev_n), cands[0])
-                                talhao_num = best
-                            else:
-                                talhao_num = cands[0]
-                            carry_talhao = talhao_num
-                    if not talhao_num and registros_sub and registros_sub[-1].get("talhao"):
-                        talhao_num = registros_sub[-1]["talhao"]
-
-                # Se for linha de total (sem variedade) ou vazia
-                if not talhao_num or not var_norm:
+                if not var_norm or not area_norm:
                     continue
 
                 registros_sub.append({
@@ -8229,26 +8251,27 @@ def _v18_extrair_tabelas_grade(caminho):
                 })
 
             for idx, rec in enumerate(registros_sub):
-                if not rec["talhao"]:
-                    if idx == 0 and len(registros_sub) > 1 and registros_sub[1]["talhao"] == "2":
+                if not rec.get("talhao"):
+                    if idx == 0 and len(registros_sub) > 1 and registros_sub[1].get("talhao") in {"2", "3"}:
                         rec["talhao"] = "1"
                     elif 0 < idx < len(registros_sub) - 1:
-                        p_val = registros_sub[idx - 1]["talhao"]
-                        n_val = registros_sub[idx + 1]["talhao"]
+                        p_val = registros_sub[idx - 1].get("talhao", "")
+                        n_val = registros_sub[idx + 1].get("talhao", "")
                         if p_val.isdigit() and n_val.isdigit() and int(n_val) - int(p_val) == 2:
                             rec["talhao"] = str(int(p_val) + 1)
-                elif idx == 0 and len(registros_sub) > 1 and registros_sub[1]["talhao"] in {"2", "3"}:
+                    elif idx > 0 and registros_sub[idx - 1].get("talhao", "").isdigit():
+                        rec["talhao"] = str(int(registros_sub[idx - 1]["talhao"]) + 1)
+                elif idx == 0 and len(registros_sub) > 1 and registros_sub[1].get("talhao") in {"2", "3"}:
                     if rec["talhao"] in {"41", "11", "4", "7"}:
                         rec["talhao"] = "1"
                 elif 0 < idx < len(registros_sub) - 1:
-                    p_val = registros_sub[idx - 1]["talhao"]
-                    n_val = registros_sub[idx + 1]["talhao"]
+                    p_val = registros_sub[idx - 1].get("talhao", "")
+                    n_val = registros_sub[idx + 1].get("talhao", "")
                     if p_val.isdigit() and n_val.isdigit() and int(n_val) - int(p_val) == 2:
-                        # Se o talhão atual for incoerente com a sequência p_val e n_val
                         if not rec["talhao"] or int(rec["talhao"]) > 100 or abs(int(rec["talhao"]) - int(p_val)) != 1:
                             rec["talhao"] = str(int(p_val) + 1)
 
-            todos_registros.extend([r for r in registros_sub if r["talhao"]])
+            todos_registros.extend([r for r in registros_sub if r.get("talhao")])
 
     return todos_registros
 
