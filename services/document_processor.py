@@ -383,6 +383,8 @@ class DocumentProcessor:
 
             return {
                 "sucesso": True,
+                "arquivo": arquivo,
+                "caminho_arquivo": arquivo,
                 "pasta_saida": pasta_saida,
                 "paginas": resultados,
                 "texto_completo": texto_completo,

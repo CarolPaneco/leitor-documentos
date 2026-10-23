@@ -3442,6 +3442,9 @@ def _v10_normalizar_variedade(tokens: List[str]) -> str:
         valor,
     ).strip()
 
+    # Normaliza O -> 0 em códigos como RBO75322 -> RB075322
+    valor = _re_v10.sub(r"\b(RB|CTC|SP|IAC)[Oo](\d+)", r"\g<1>0\2", valor, flags=_re_v10.I)
+
     # Correção segura para o valor que aparece em tabelas agrícolas.
     compactado = _re_v10.sub(
         r"\s+",
@@ -6925,6 +6928,138 @@ def _v15_result(processed):
 
 
 # A V12 torna-se a camada pública final.
+
+def _extrair_talhoes_mapa_pdf(pdf_path):
+    map_talhoes = {}
+    try:
+        import fitz
+        doc = fitz.open(pdf_path)
+        for page in doc:
+            words = page.get_text("words")
+            for i, w in enumerate(words):
+                t = w[4]
+                m = re.match(r"^(\d+[,.]\d+)ha$", t.lower())
+                if m and i > 0:
+                    prev = words[i-1][4]
+                    if prev.isdigit() and 1 <= int(prev) <= 999:
+                        map_talhoes[prev] = m.group(1).replace(".", ",")
+    except Exception:
+        pass
+    return map_talhoes
+
+
+def _extrair_datas_por_talhao_texto(processed):
+    datas_talhoes = {}
+    linhas = []
+    for p in processed.get("paginas", []):
+        linhas.extend(p.get("linhas", []))
+    for l in linhas:
+        txt = l.get("texto", "")
+        m_date = re.search(r"\b(\d{2}/\d{2}/\d{4}|\d{4})\b", txt)
+        if m_date:
+            date_val = m_date.group(1)
+            nums = re.findall(r"\b(\d{1,3})\b", txt[:m_date.start()])
+            for n in nums:
+                if 1 <= int(n) <= 200:
+                    datas_talhoes[n] = date_val
+    return datas_talhoes
+
+
+def _harmonizar_com_mapa(resultado, processed):
+    pdf_path = processed.get("caminho_arquivo") or processed.get("arquivo") or ""
+    map_talhoes = {}
+    if pdf_path and pdf_path.lower().endswith(".pdf") and _os_v12.path.exists(pdf_path):
+        map_talhoes = _extrair_talhoes_mapa_pdf(pdf_path)
+
+    # Fallback se não for PDF vetorial: extrai do OCR de palavras
+    if not map_talhoes:
+        for p in processed.get("paginas", []):
+            words = _page_words(p)
+            pairs = _extract_map_number_area_pairs(words, min_y=100)
+            for area, nums in pairs.items():
+                for num in nums:
+                    if num.isdigit() and 1 <= int(num) <= 999:
+                        map_talhoes[num] = area
+
+    talhoes = resultado.get("talhoes") or []
+    datas_ocr = _extrair_datas_por_talhao_texto(processed)
+
+    # 1. Normaliza variedade e formatação de área
+    for t in talhoes:
+        t["variedade"] = _v16_normalizar_variedade(t.get("variedade", ""))
+        area_str = str(t.get("area", "")).strip().replace(".", ",")
+        if area_str.isdigit() and len(area_str) == 3:
+            area_str = f"{area_str[0]},{area_str[1:]}"
+            t["area"] = area_str
+
+    if not map_talhoes:
+        talhoes_validos = [t for t in talhoes if str(t.get("talhao", "")).strip()]
+        resultado["talhoes"] = talhoes_validos
+        if resultado.get("blocos"):
+            resultado["blocos"][0]["talhoes"] = talhoes_validos
+        return resultado
+
+    # 2. Corrige talhão e área cruzando com o mapa
+    for t in talhoes:
+        tid = str(t.get("talhao", "")).strip()
+        tarea = str(t.get("area", "")).strip().replace(".", ",")
+
+        if tid in map_talhoes:
+            if not tarea or tarea != map_talhoes[tid]:
+                t["area"] = map_talhoes[tid]
+        elif tarea:
+            matches = [mid for mid, ma in map_talhoes.items() if ma == tarea]
+            if len(matches) == 1:
+                t["talhao"] = matches[0]
+                t["area"] = map_talhoes[matches[0]]
+
+    # 3. Deduplica e descarta talhões fantasmas que não existem no mapa
+    dedup = {}
+    for t in talhoes:
+        tid = str(t.get("talhao", "")).strip()
+        if not tid or not tid.isdigit():
+            continue
+        if len(map_talhoes) >= 4 and tid not in map_talhoes:
+            continue
+
+        if tid not in dedup:
+            dedup[tid] = t
+        else:
+            curr_score = sum(bool(str(t.get(c, "")).strip()) for c in ["area", "plantio", "variedade"])
+            prev_score = sum(bool(str(dedup[tid].get(c, "")).strip()) for c in ["area", "plantio", "variedade"])
+            if curr_score > prev_score:
+                dedup[tid] = t
+
+    # 4. Resgata talhões faltantes do mapa
+    from collections import Counter
+    variedades_existentes = [t.get("variedade") for t in dedup.values() if t.get("variedade")]
+    var_padrao = Counter(variedades_existentes).most_common(1)[0][0] if variedades_existentes else "RB075322"
+
+    for mid, marea in map_talhoes.items():
+        if mid not in dedup:
+            dt_talhao = datas_ocr.get(mid)
+            if not dt_talhao:
+                m_int = int(mid)
+                vizinhos = sorted(dedup.keys(), key=lambda k: abs(int(k) - m_int))
+                dt_talhao = dedup[vizinhos[0]].get("plantio", "") if vizinhos else ""
+                var_vizinho = dedup[vizinhos[0]].get("variedade", var_padrao) if vizinhos else var_padrao
+            else:
+                var_vizinho = var_padrao
+
+            dedup[mid] = {
+                "talhao": mid,
+                "variedade": var_vizinho,
+                "area": marea,
+                "plantio": dt_talhao,
+                "origem": "mapa_resgate",
+            }
+
+    talhoes_finais = sorted(dedup.values(), key=lambda t: int(t["talhao"]) if t["talhao"].isdigit() else 9999)
+    resultado["talhoes"] = talhoes_finais
+    if resultado.get("blocos"):
+        resultado["blocos"][0]["talhoes"] = talhoes_finais
+    return resultado
+
 def extrair_dados(processed):
     return _v15_result(processed)
 
@@ -9006,8 +9141,9 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
         if candidatos_mesmo_talhao:
             compativeis = []
             for r in candidatos_mesmo_talhao:
-                r_var_key = _key(str(r.get("variedade", "")))
-                if r_var_key and var_novo_key and r_var_key != var_novo_key:
+                r_var_key = _key(str(r.get("variedade", ""))).replace("o", "0")
+                novo_var_key = var_novo_key.replace("o", "0")
+                if r_var_key and novo_var_key and r_var_key != novo_var_key:
                     continue
                 # Se ambos têm área e as áreas são diferentes, são sub-talhões/entradas distintas!
                 r_area = str(r.get("area", "")).replace(".", ",").strip()
@@ -9719,5 +9855,14 @@ def extrair_dados(processed):
             "talhoes": resultado["talhoes"],
         }]
 
+    # Corrige parênteses desbalanceados na propriedade (ex: Fazenda Anjo Custódio (470))
+    prop = str(resultado.get("propriedade") or resultado.get("metadata", {}).get("propriedade") or "")
+    if prop.count("(") > prop.count(")"):
+        prop += ")"
+        resultado["propriedade"] = prop
+        if "metadata" in resultado:
+            resultado["metadata"]["propriedade"] = prop
+
+    resultado = _harmonizar_com_mapa(resultado, processed)
     return resultado
 

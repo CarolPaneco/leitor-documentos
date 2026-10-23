@@ -58,7 +58,7 @@ ALLOWED_EXTENSIONS = {
 # Configurações do lote (debounce / agrupamento inteligente)
 # Janela de silêncio: aguarda 15s sem novos e-mails do mesmo remetente antes de fechar o lote,
 # garantindo tempo suficiente para envio de múltiplos anexos/e-mails.
-JANELA_SILENCIO_SEGUNDOS = int(os.environ.get("JANELA_SILENCIO_SEGUNDOS", 15))
+JANELA_SILENCIO_SEGUNDOS = int(os.environ.get("JANELA_SILENCIO_SEGUNDOS", 60))
 # Janela máxima: se novos e-mails continuarem chegando sem parar, após 300s (5 min)
 # fechamos o lote atual para não reter indefinidamente os documentos já recebidos.
 JANELA_MAXIMA_SEGUNDOS = int(os.environ.get("JANELA_MAXIMA_SEGUNDOS", 300))
@@ -128,12 +128,19 @@ def extrair_linhas_para_excel(documento):
         bloco_proprio = str(b.get("proprietario") or proprietario).strip()
         bloco_mun = str(b.get("municipio") or municipio).strip()
 
+        vistos_talhoes = set()
         for talhao in (b.get("talhoes") or []):
+            t_num = str(talhao.get("talhao") or "").strip()
+            # Descarta linhas sem número de talhão (são resíduos de OCR de legendas ou bordas)
+            if not t_num or not any(c.isdigit() for c in t_num):
+                continue
+            if t_num in vistos_talhoes:
+                continue
+            vistos_talhoes.add(t_num)
+
             var_t = str(talhao.get("variedade") or "").strip()
             # Descarta vazamento de blocos de metadados, status ou rodapés
             if any(k in var_t.lower() for k in ["bloco", "status", "mapa de", "área total", "resumo de área"]):
-                continue
-            if not str(talhao.get("area") or "").strip() and not str(talhao.get("talhao") or "").strip():
                 continue
 
             linhas.append({
