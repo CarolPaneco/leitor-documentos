@@ -533,6 +533,27 @@ def ping():
 
 
 @app.route(
+    "/api/watcher/verificar-agora",
+    methods=["POST", "GET"]
+)
+def api_watcher_verificar_agora():
+    """Força verificação e processamento imediato dos e-mails no Gmail."""
+    try:
+        from services.email_watcher import forcar_verificacao_emails
+        import threading
+        threading.Thread(target=forcar_verificacao_emails, daemon=True).start()
+        return jsonify({
+            "status": "ok",
+            "mensagem": "Verificação manual do Gmail disparada com sucesso."
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "status": "erro",
+            "mensagem": str(e)
+        }), 500
+
+
+@app.route(
     "/status-watcher",
     methods=["GET"]
 )
@@ -545,7 +566,13 @@ def status_watcher():
             EMAILS_PROCESSADOS_IDS,
             LOGS_RECENTES,
             JANELA_SILENCIO_SEGUNDOS,
+            forcar_verificacao_emails,
         )
+
+        # Se acessado via navegador (não JSON), dispara checagem imediata em segundo plano
+        if request.args.get("json") != "1" and request.headers.get("Accept") != "application/json":
+            import threading
+            threading.Thread(target=forcar_verificacao_emails, daemon=True).start()
         lotes_info = {}
         agora = time.time()
         for k, v in LOTES_PENDENTES.items():
@@ -760,6 +787,40 @@ def status_watcher():
             background: #0369a1;
             transform: translateY(-2px);
         }
+        .btn-verificar {
+            background: #0284c7;
+            color: #ffffff;
+            border: 1px solid #38bdf8;
+            padding: 7px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-verificar:hover {
+            background: #0369a1;
+            transform: translateY(-1px);
+        }
+        .btn-verificar:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .banner-keepalive {
+            background: #0c4a6e;
+            border: 1px solid #0284c7;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            font-size: 13.5px;
+            color: #e0f2fe;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
         .lote-card {
             background: #1e293b;
             border-left: 4px solid #f59e0b;
@@ -784,7 +845,15 @@ def status_watcher():
     <div class="container">
         <div class="header">
             <div class="title">🌾 Robô Leitor Agrícola</div>
-            <div class="badge-status">● Vigilante 100% Ativo</div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <button id="btnVerificar" onclick="forcarVerificacao()" class="btn-verificar">⚡ Checar Novos E-mails Agora</button>
+                <div class="badge-status">● Vigilante 100% Ativo</div>
+            </div>
+        </div>
+
+        <div class="banner-keepalive">
+            <span style="font-size: 18px;">🛡️</span>
+            <div><b>Monitoramento 24/7 Ativo:</b> O robô monitora o Gmail continuamente. O auto-pinger mantém o servidor acordado no Render, e os lotes e anexos são gravados em disco de forma persistente.</div>
         </div>
 
         <div class="cards-row">
@@ -868,6 +937,28 @@ def status_watcher():
         rolarParaOFim(true);
         setTimeout(() => rolarParaOFim(true), 100);
         setTimeout(() => rolarParaOFim(true), 350);
+
+        // Função para forçar checagem imediata via botão
+        async function forcarVerificacao() {
+            const btn = document.getElementById("btnVerificar");
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = "⏳ Verificando Gmail...";
+            }
+            try {
+                await fetch("/api/watcher/verificar-agora", { method: "POST" });
+                await atualizarEmTempoReal();
+            } catch (err) {
+                console.error("Erro na verificação manual:", err);
+            } finally {
+                setTimeout(() => {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerText = "⚡ Checar Novos E-mails Agora";
+                    }
+                }, 1500);
+            }
+        }
 
         // Atualização em tempo real sem recarregar a tela (zero piscada, preservando a leitura)
         async function atualizarEmTempoReal() {

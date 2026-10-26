@@ -14,8 +14,29 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 import functools
+import json
 
-LOGS_RECENTES = []
+DATABASE_DIR = os.path.join(os.path.dirname(__file__), '..', 'database')
+HISTORICO_PATH = os.path.join(DATABASE_DIR, 'emails_processados.txt')
+LOGS_FILE = os.path.join(DATABASE_DIR, 'watcher_logs.txt')
+LOTES_STATE_FILE = os.path.join(DATABASE_DIR, 'lotes_pendentes.json')
+LOTES_ANEXOS_DIR = os.path.join(DATABASE_DIR, 'lotes_anexos')
+
+def _carregar_logs_salvos():
+    logs = []
+    try:
+        if os.path.exists(LOGS_FILE):
+            with open(LOGS_FILE, 'r', encoding='utf-8', errors='replace') as f:
+                for line in f:
+                    line = line.rstrip('\r\n')
+                    if line:
+                        logs.append(line)
+            return logs[-800:]
+    except Exception:
+        pass
+    return []
+
+LOGS_RECENTES = _carregar_logs_salvos()
 
 _builtin_print = print
 def print(*args, **kwargs):
@@ -25,9 +46,16 @@ def print(*args, **kwargs):
         fuso_br = timezone(timedelta(hours=-3))
         hora_br = datetime.now(fuso_br).strftime("%H:%M:%S")
         msg = " ".join(str(a) for a in args)
-        LOGS_RECENTES.append(f"[{hora_br}] {msg}")
+        linha_formatada = f"[{hora_br}] {msg}"
+        LOGS_RECENTES.append(linha_formatada)
         if len(LOGS_RECENTES) > 800:
             LOGS_RECENTES.pop(0)
+        try:
+            os.makedirs(os.path.dirname(LOGS_FILE), exist_ok=True)
+            with open(LOGS_FILE, 'a', encoding='utf-8', errors='replace') as f_log:
+                f_log.write(linha_formatada + "\n")
+        except Exception:
+            pass
     except Exception:
         pass
     try:
@@ -67,12 +95,62 @@ JANELA_SILENCIO_SEGUNDOS = max(60, int(os.environ.get("JANELA_SILENCIO_SEGUNDOS"
 # fechamos o lote atual para não reter indefinidamente os documentos já recebidos.
 JANELA_MAXIMA_SEGUNDOS = int(os.environ.get("JANELA_MAXIMA_SEGUNDOS", 600))
 
-# Dicionário em memória com os lotes acumulados
-# Chave: remetente_email (minúsculas)
-LOTES_PENDENTES = {}
+def _salvar_lotes_em_disco():
+    """Persiste LOTES_PENDENTES em JSON no disco para sobreviver a reinicializações do servidor."""
+    try:
+        os.makedirs(DATABASE_DIR, exist_ok=True)
+        estado = {}
+        for remetente, lote in LOTES_PENDENTES.items():
+            anexos_meta = []
+            for a in lote.get("anexos", []):
+                anexos_meta.append({
+                    "nome": a.get("nome"),
+                    "ext": a.get("ext"),
+                    "caminho_arquivo": a.get("caminho_arquivo"),
+                })
+            estado[remetente] = {
+                "remetente": lote.get("remetente"),
+                "assunto": lote.get("assunto"),
+                "primeiro_recebimento": lote.get("primeiro_recebimento"),
+                "ultimo_recebimento": lote.get("ultimo_recebimento"),
+                "qtd_emails": lote.get("qtd_emails", 1),
+                "anexos": anexos_meta,
+            }
+        with open(LOTES_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(estado, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[DISK ERROR] Falha ao salvar lotes em disco: {e}")
 
-# Arquivo para persistir Message-IDs já processados (evita reprocessamento ao reiniciar)
-HISTORICO_PATH = os.path.join(os.path.dirname(__file__), '..', 'database', 'emails_processados.txt')
+def _carregar_lotes_de_disco():
+    """Recupera lotes que estavam acumulando antes de uma reinicialização ou suspensão."""
+    if not os.path.exists(LOTES_STATE_FILE):
+        return {}
+    try:
+        with open(LOTES_STATE_FILE, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+        lotes_recuperados = {}
+        for remetente, lote in dados.items():
+            anexos_validos = []
+            for a in lote.get("anexos", []):
+                caminho = a.get("caminho_arquivo")
+                if caminho and os.path.exists(caminho):
+                    anexos_validos.append({
+                        "nome": a.get("nome"),
+                        "ext": a.get("ext"),
+                        "caminho_arquivo": caminho,
+                    })
+            if anexos_validos:
+                lote["anexos"] = anexos_validos
+                lotes_recuperados[remetente] = lote
+        if lotes_recuperados:
+            print(f"[DISK] {len(lotes_recuperados)} lote(s) pendente(s) restaurado(s) do disco com sucesso!")
+        return lotes_recuperados
+    except Exception as e:
+        print(f"[DISK ERROR] Falha ao restaurar lotes do disco: {e}")
+        return {}
+
+# Carrega os lotes acumulados (do disco se houver, ou dicionário vazio)
+LOTES_PENDENTES = _carregar_lotes_de_disco()
 
 def _carregar_emails_processados():
     ids = set()
@@ -81,7 +159,8 @@ def _carregar_emails_processados():
             with open(HISTORICO_PATH, 'r', encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
-                    if line:
+                    # Ignora números puros que eram sequence numbers transitórios antigos
+                    if line and not line.isdigit():
                         ids.add(line)
     except Exception:
         pass
@@ -371,41 +450,46 @@ def enviar_resposta_email(destinatario, assunto_original, linhas, docs_info, err
 def coletar_novos_emails():
     """
     Busca novos e-mails na caixa de entrada do Gmail.
-    Garante que multiplos arquivos (enviados juntos no mesmo e-mail OU enviados
+    Garante que múltiplos arquivos (enviados juntos no mesmo e-mail OU enviados
     em e-mails separados agrupados na mesma conversa pelo Gmail) sejam 100% detectados.
+    Utiliza IMAP UID para garantir identificadores imutáveis e persistentes.
     """
     try:
         imap = imaplib.IMAP4_SSL("imap.gmail.com")
         imap.login(GMAIL_USER, GMAIL_PASS)
         imap.select("INBOX")
 
-        ids_candidatos = []
-
-        # 1. Busca e-mails nao lidos (UNSEEN)
-        status_unseen, msgs_unseen = imap.search(None, "UNSEEN")
+        uids_unseen = []
+        status_unseen, msgs_unseen = imap.uid("search", None, "UNSEEN")
         if status_unseen == "OK" and msgs_unseen[0]:
-            for mid in msgs_unseen[0].split():
-                if mid not in ids_candidatos:
-                    ids_candidatos.append(mid)
+            uids_unseen = msgs_unseen[0].split()
 
-        # 2. Busca os ultimos 200 e-mails da caixa (para capturar lotes grandes e conversas agrupadas)
-        status_all, msgs_all = imap.search(None, "ALL")
+        uids_all = []
+        status_all, msgs_all = imap.uid("search", None, "ALL")
         if status_all == "OK" and msgs_all[0]:
-            for mid in msgs_all[0].split()[-200:]:
-                if mid not in ids_candidatos:
-                    ids_candidatos.append(mid)
+            uids_all = msgs_all[0].split()[-200:]
 
-        if not ids_candidatos:
+        candidatos = []
+        # Mensagens não lidas (UNSEEN) têm prioridade absoluta (is_unseen=True)
+        for u in uids_unseen:
+            if u not in [c[0] for c in candidatos]:
+                candidatos.append((u, True))
+        # Mensagens recentes (ALL) para capturar agrupamentos (is_unseen=False)
+        for u in uids_all:
+            if u not in [c[0] for c in candidatos]:
+                candidatos.append((u, False))
+
+        if not candidatos:
             imap.logout()
             return
 
         agora = time.time()
 
-        for msg_id in ids_candidatos:
-            m_str = msg_id.decode()
+        for uid_bytes, is_unseen in candidatos:
+            uid_str = uid_bytes.decode()
 
-            # Pega cabecalho basico primeiro para validar Message-ID e data sem baixar o corpo inteiro
-            status_h, dados_h = imap.fetch(msg_id, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE)])")
+            # Pega cabeçalho básico primeiro para validar Message-ID e data sem baixar o corpo inteiro
+            status_h, dados_h = imap.uid("fetch", uid_bytes, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE)])")
             if status_h != "OK" or not dados_h:
                 continue
 
@@ -413,47 +497,38 @@ def coletar_novos_emails():
             hdr_msg = email.message_from_bytes(hdr_text)
             message_id_hdr = str(hdr_msg.get("Message-ID") or "").strip()
 
-            # Se este e-mail ja foi processado nesta sessao ou historico, pula!
+            # Se este e-mail já foi processado anteriormente nesta sessão ou histórico:
             if message_id_hdr and message_id_hdr in EMAILS_PROCESSADOS_IDS:
                 continue
-            if m_str in EMAILS_PROCESSADOS_IDS:
+            if f"UID:{uid_str}" in EMAILS_PROCESSADOS_IDS:
                 continue
 
-            # Se o e-mail tem mais de 2 horas (7200 segundos), considera antigo e nao reprocessa
-            date_raw = hdr_msg.get("Date")
-            if date_raw:
-                try:
-                    from email.utils import parsedate_to_datetime
-                    dt_email = parsedate_to_datetime(date_raw)
-                    ts_email = dt_email.timestamp()
-                    if (agora - ts_email) > 7200:
-                        EMAILS_PROCESSADOS_IDS.add(m_str)
-                        if message_id_hdr:
-                            EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
-                            _salvar_email_processado(message_id_hdr)
-                        continue
-                except Exception:
-                    pass
+            # Filtro de idade: APENAS para e-mails que JÁ FORAM LIDOS (is_unseen == False).
+            # E-mails NÃO LIDOS (UNSEEN) NUNCA são descartados, garantindo que mesmo se o robô
+            # esteve em repouso por horas, nenhum e-mail enviado pelo usuário seja perdido!
+            if not is_unseen:
+                date_raw = hdr_msg.get("Date")
+                if date_raw:
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        dt_email = parsedate_to_datetime(date_raw)
+                        ts_email = dt_email.timestamp()
+                        if (agora - ts_email) > 86400:  # Mais de 24 horas e já lido
+                            EMAILS_PROCESSADOS_IDS.add(f"UID:{uid_str}")
+                            if message_id_hdr:
+                                EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
+                                _salvar_email_processado(message_id_hdr)
+                            continue
+                    except Exception:
+                        pass
 
             # Baixa o e-mail completo para extrair anexos
-            status_f, dados_msg = imap.fetch(msg_id, "(RFC822)")
+            status_f, dados_msg = imap.uid("fetch", uid_bytes, "(RFC822)")
             if status_f != "OK" or not dados_msg:
                 continue
 
             raw_email = dados_msg[0][1]
             msg = email.message_from_bytes(raw_email)
-
-            # Registra como processado para nunca mais repetir
-            EMAILS_PROCESSADOS_IDS.add(m_str)
-            if message_id_hdr:
-                EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
-                _salvar_email_processado(message_id_hdr)
-
-            # Marca como lido no Gmail
-            try:
-                imap.store(msg_id, "+FLAGS", "\\Seen")
-            except Exception:
-                pass
 
             remetente_raw = msg.get("From", "")
             remetente = _decodificar_cabecalho(remetente_raw)
@@ -466,10 +541,20 @@ def coletar_novos_emails():
 
             # Ignora alertas de sistema
             if any(k in remetente_email for k in ["brevo.com", "google.com", "noreply", "no-reply", "mailer-daemon", "postmaster"]):
+                try:
+                    imap.uid("store", uid_bytes, "+FLAGS", "(\\Seen)")
+                except Exception:
+                    pass
+                EMAILS_PROCESSADOS_IDS.add(f"UID:{uid_str}")
+                if message_id_hdr:
+                    EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
+                    _salvar_email_processado(message_id_hdr)
                 continue
 
-            # Extrai TODOS os anexos (suporta multiplos arquivos no mesmo e-mail e formatos inline)
+            # Extrai TODOS os anexos (suporta múltiplos arquivos no mesmo e-mail e formatos inline)
             anexos = []
+            os.makedirs(LOTES_ANEXOS_DIR, exist_ok=True)
+
             for part in msg.walk():
                 if part.get_content_maintype() == "multipart":
                     continue
@@ -491,11 +576,31 @@ def coletar_novos_emails():
                 if ext in ALLOWED_EXTENSIONS or content_type in ["application/pdf", "image/png", "image/jpeg", "image/tiff"]:
                     payload = part.get_payload(decode=True)
                     if payload:
+                        # Salva imediatamente em disco para persistência
+                        id_unico = uuid.uuid4().hex[:8]
+                        nome_salvo = f"{id_unico}_{''.join(c for c in nome_arquivo if c.isalnum() or c in '._- ')}"
+                        caminho_salvo = os.path.join(LOTES_ANEXOS_DIR, nome_salvo)
+                        with open(caminho_salvo, "wb") as f_anexo:
+                            f_anexo.write(payload)
+
                         anexos.append({
                             "nome": nome_arquivo,
                             "ext": ext if ext in ALLOWED_EXTENSIONS else ".pdf",
+                            "caminho_arquivo": caminho_salvo,
                             "payload": payload,
                         })
+
+            # Registra como processado para não duplicar
+            EMAILS_PROCESSADOS_IDS.add(f"UID:{uid_str}")
+            if message_id_hdr:
+                EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
+                _salvar_email_processado(message_id_hdr)
+
+            # Marca como lido no Gmail
+            try:
+                imap.uid("store", uid_bytes, "+FLAGS", "(\\Seen)")
+            except Exception:
+                pass
 
             if not anexos:
                 continue
@@ -516,12 +621,15 @@ def coletar_novos_emails():
             else:
                 lote = LOTES_PENDENTES[remetente_email]
                 lote["anexos"].extend(anexos)
-                # REINICIA o cronometro a partir do ultimo arquivo/e-mail adicionado
+                # REINICIA o cronômetro a partir do último arquivo/e-mail adicionado
                 lote["ultimo_recebimento"] = agora_adicao
                 lote["qtd_emails"] += 1
                 if not lote.get("assunto") and assunto:
                     lote["assunto"] = assunto
                 print(f"[EMAIL BATCH] +{len(anexos)} anexo(s) adicionados ao lote de {remetente_email}. Total: {len(lote['anexos'])} anexo(s) ({lote['qtd_emails']} e-mails). Cronometro reiniciado para {JANELA_SILENCIO_SEGUNDOS}s!")
+
+            # Salva o estado atualizado no disco
+            _salvar_lotes_em_disco()
 
         imap.logout()
 
@@ -532,8 +640,8 @@ def coletar_novos_emails():
 
 def processar_lotes_prontos():
     """
-    Verifica se algum lote pendente atingiu a janela de silêncio (ex: 45s sem novos
-    arquivos daquele remetente) ou a janela máxima (ex: 180s).
+    Verifica se algum lote pendente atingiu a janela de silêncio (ex: 60s sem novos
+    arquivos daquele remetente) ou a janela máxima (ex: 600s).
     Quando atinge, processa todos os documentos juntos e envia uma única planilha consolidada.
     """
     if not LOTES_PENDENTES:
@@ -557,6 +665,8 @@ def processar_lotes_prontos():
         if not lote:
             continue
 
+        _salvar_lotes_em_disco()
+
         qtd_docs = len(lote["anexos"])
         print(f"============================================================")
         print(f"[EMAIL BATCH] FECHANDO LOTE PARA: {remetente}")
@@ -572,11 +682,17 @@ def processar_lotes_prontos():
             for idx, item in enumerate(lote["anexos"], start=1):
                 nome_arq = item["nome"]
                 ext = item["ext"]
-                payload = item["payload"]
+                caminho_orig = item.get("caminho_arquivo")
 
                 caminho_arq = os.path.join(pasta_temp, f"doc_{idx}_{uuid.uuid4().hex[:6]}{ext}")
-                with open(caminho_arq, "wb") as f:
-                    f.write(payload)
+                if caminho_orig and os.path.exists(caminho_orig):
+                    shutil.copy2(caminho_orig, caminho_arq)
+                elif item.get("payload"):
+                    with open(caminho_arq, "wb") as f:
+                        f.write(item["payload"])
+                else:
+                    print(f"[EXTRACAO ERRO] Arquivo não acessível: {nome_arq}")
+                    continue
 
                 doc_id = datetime.now().strftime("%Y%m%d_%H%M%S") + f"_{idx}_" + uuid.uuid4().hex[:6]
                 resultado_ocr = processor.processar(caminho_arq, doc_id)
@@ -632,15 +748,57 @@ def processar_lotes_prontos():
                     erro_msg="Não foi possível identificar tabelas ou talhões agrícolas legíveis nos documentos enviados."
                 )
 
+            # Limpa anexos de disco salvos para este lote concluído
+            for item in lote.get("anexos", []):
+                c_orig = item.get("caminho_arquivo")
+                if c_orig and os.path.exists(c_orig):
+                    try:
+                        os.remove(c_orig)
+                    except Exception:
+                        pass
+
         except Exception as err:
             print(f"[EMAIL BATCH ERROR] Erro ao processar lote de {remetente}: {err}")
             traceback.print_exc()
         finally:
             shutil.rmtree(pasta_temp, ignore_errors=True)
+            _salvar_lotes_em_disco()
+
+
+def _auto_keepalive_worker():
+    """
+    Ping periódico para manter o servidor ativo 24/7 no Render Free.
+    O Render Free suspende o serviço se não houver requisições HTTP após 15 minutos.
+    Fazendo um ping HTTP a cada 8 minutos na URL pública, a instância nunca entra em repouso.
+    """
+    import urllib.request
+    url = os.environ.get("RENDER_EXTERNAL_URL", "https://leitor-documentos.onrender.com").rstrip("/") + "/ping"
+    print(f"[KEEPALIVE] Auto-pinger 24/7 iniciado (alvo: {url}, intervalo: 480s)")
+    while True:
+        try:
+            time.sleep(480)  # 8 minutos (bem abaixo dos 15 minutos do Render)
+            req = urllib.request.Request(url, headers={"User-Agent": "RoboLeitor-KeepAlive/1.0"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                status = resp.getcode()
+                print(f"[KEEPALIVE] Auto-ping 24/7 enviado para {url} (status: {status})")
+        except Exception as e:
+            print(f"[KEEPALIVE] Aviso no auto-ping ({url}): {e}")
+
+
+def forcar_verificacao_emails():
+    """Executa imediatamente uma rodada de coleta e processamento sem aguardar o timer."""
+    coletar_novos_emails()
+    processar_lotes_prontos()
 
 
 def loop_vigilante_email(intervalo_segundos=5):
     print(f"[EMAIL WORKER] Vigilante de e-mail iniciado para {GMAIL_USER} (intervalo: {intervalo_segundos}s, janela silêncio: {JANELA_SILENCIO_SEGUNDOS}s)")
+
+    # Inicia o auto-keepalive em thread daemon separada
+    import threading
+    t_ka = threading.Thread(target=_auto_keepalive_worker, daemon=True)
+    t_ka.start()
+
     ciclo = 0
     while True:
         try:
