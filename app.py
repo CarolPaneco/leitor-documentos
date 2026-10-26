@@ -178,6 +178,10 @@ def extrair_linhas_excel(documento):
 
             area_t = str(talhao.get("area") or talhao.get("área") or "").strip()
             plantio_t = str(talhao.get("plantio") or talhao.get("data_plantio") or "").strip()
+            import re
+            m_dt = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", plantio_t)
+            if m_dt:
+                plantio_t = f"{int(m_dt.group(1)):02d}/{int(m_dt.group(2)):02d}/{m_dt.group(3)}"
 
             chave = (codigo_bloco, t_num, var_t, area_t, plantio_t)
             if chave in vistos:

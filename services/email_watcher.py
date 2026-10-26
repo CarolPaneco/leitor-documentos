@@ -148,6 +148,10 @@ def extrair_linhas_para_excel(documento):
 
             area_t = str(talhao.get("area") or talhao.get("área") or "").strip()
             plantio_t = str(talhao.get("plantio") or talhao.get("data_plantio") or "").strip()
+            import re
+            m_dt = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", plantio_t)
+            if m_dt:
+                plantio_t = f"{int(m_dt.group(1)):02d}/{int(m_dt.group(2)):02d}/{m_dt.group(3)}"
 
             # Evita duplicatas puras causadas por repetição de OCR, mantendo talhões divididos legítimos
             chave = (bloco_codigo, t_num, var_t, area_t, plantio_t)
@@ -384,10 +388,10 @@ def coletar_novos_emails():
                 if mid not in ids_candidatos:
                     ids_candidatos.append(mid)
 
-        # 2. Busca os ultimos 15 e-mails da caixa (para capturar e-mails agrupados em conversa)
+        # 2. Busca os ultimos 100 e-mails da caixa (para capturar lotes grandes e conversas agrupadas)
         status_all, msgs_all = imap.search(None, "ALL")
         if status_all == "OK" and msgs_all[0]:
-            for mid in msgs_all[0].split()[-15:]:
+            for mid in msgs_all[0].split()[-100:]:
                 if mid not in ids_candidatos:
                     ids_candidatos.append(mid)
 

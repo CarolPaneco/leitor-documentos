@@ -9073,15 +9073,43 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
                 r_var_key = _key(str(r.get("variedade", "")))
                 if r_var_key and var_novo_key and r_var_key != var_novo_key:
                     continue
+
+                r_plan = str(r.get("plantio", "")).strip()
+                novo_plan = str(novo.get("plantio", "")).strip()
+
+                def _norm_data_local(d):
+                    m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", d)
+                    return f"{int(m.group(1)):02d}/{int(m.group(2)):02d}/{m.group(3)}" if m else d
+
+                r_plan_n = _norm_data_local(r_plan)
+                novo_plan_n = _norm_data_local(novo_plan)
+
+                # Se r e novo têm a mesma variedade e a mesma data de plantio (não vazia),
+                # trata-se da mesma linha da tabela onde uma das leituras capturou a área correta.
+                # São compatíveis para fusão e atualização, não devem ser duplicadas!
+                if r_var_key == var_novo_key and r_plan_n and novo_plan_n and r_plan_n == novo_plan_n:
+                    compativeis.append(r)
+                    continue
+
+                # Se r é de OCR espacial impreciso e novo vem da grade da tabela (v18_grade_tabela),
+                # a grade da tabela tem precedência e deve atualizar r, não criar linha fantasma duplicada!
+                if r.get("origem") in {"ocr_espacial", "v17_mapa_espacial", "sequencia_espacial", "v17_texto_ocr"} and novo.get("origem") == "v18_grade_tabela":
+                    compativeis.append(r)
+                    continue
+
+                # Se r não tem plantio e novo tem plantio e mesma variedade,
+                # e novo vem da grade da tabela, novo substitui a estimativa incompleta de r
+                if not r_plan and novo_plan:
+                    compativeis.append(r)
+                    continue
+
                 # Se ambos têm área e as áreas são diferentes, são sub-talhões/entradas distintas!
                 r_area = str(r.get("area", "")).replace(".", ",").strip()
                 novo_area = str(novo.get("area", "")).replace(".", ",").strip()
                 if r_area and novo_area and r_area != novo_area:
                     continue
                 # Se ambos têm plantio e os plantios são diferentes, são entradas distintas!
-                r_plan = str(r.get("plantio", "")).strip()
-                novo_plan = str(novo.get("plantio", "")).strip()
-                if r_plan and novo_plan and r_plan != novo_plan:
+                if r_plan_n and novo_plan_n and r_plan_n != novo_plan_n:
                     continue
                 compativeis.append(r)
 
@@ -9109,10 +9137,10 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
             "area",
             "plantio",
         ):
-            if novo.get("origem") == "v18_grade_tabela" and str(novo.get(campo, "")).strip():
-                if alvo.get("origem") in {"ocr_espacial", "v17_mapa_espacial", "sequencia_espacial", "v17_texto_ocr"} or not str(alvo.get(campo, "")).strip():
+            if novo.get("origem") in {"v18_grade_tabela", "v17_texto_ocr"} and str(novo.get(campo, "")).strip():
+                if alvo.get("origem") in {"ocr_espacial", "v17_mapa_espacial", "sequencia_espacial", "v17_texto_ocr", "v18_grade_tabela"} or not str(alvo.get(campo, "")).strip():
                     alvo[campo] = novo[campo]
-                    alvo["origem"] = "v18_grade_tabela"
+                    alvo["origem"] = novo.get("origem", "v18_grade_tabela")
             elif (
                 not str(alvo.get(campo, "")).strip()
                 and str(novo.get(campo, "")).strip()
@@ -9783,6 +9811,39 @@ def extrair_dados(processed):
             "bloco": bloco_final,
             "talhoes": resultado["talhoes"],
         }]
+
+    if not resultado.get("metadata", {}).get("municipio"):
+        paginas = processed.get("paginas") or processed.get("pages") or []
+        pasta = processed.get("pasta_saida", "")
+        for page_index, page in enumerate(paginas):
+            words = _page_words(page)
+            mun_w = [w for w in words if "munic" in _word_text(w).lower()]
+            if not mun_w:
+                continue
+            caminho_img = _os_v12.path.join(pasta, f"pagina_{page_index + 1:03d}.png")
+            if not _os_v12.path.exists(caminho_img):
+                continue
+            img_p = _cv2_v12.imread(caminho_img)
+            if img_p is None:
+                continue
+            rot = max(mun_w, key=_cy)
+            ax = int(_word_x(rot))
+            ay = int(_cy(rot))
+            y1 = max(0, ay + 6)
+            y2 = min(img_p.shape[0], ay + 42)
+            x1 = max(0, ax - 10)
+            x2 = min(img_p.shape[1], ax + 380)
+            cell_crop = img_p[y1:y2, x1:x2]
+            if cell_crop.size > 0:
+                txt_cell = _pytesseract_v12.image_to_string(cell_crop, lang="por+eng", config="--psm 6").strip()
+                cand_mun = _v19_normalizar_municipio_valor(txt_cell.splitlines()[0] if txt_cell else "")
+                if cand_mun and len(cand_mun) >= 4:
+                    resultado["metadata"]["municipio"] = cand_mun
+                    resultado["municipio"] = cand_mun
+                    for b in resultado.get("blocos") or []:
+                        if not b.get("municipio"):
+                            b["municipio"] = cand_mun
+                    break
 
     return resultado
 
