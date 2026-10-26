@@ -26,7 +26,7 @@ def print(*args, **kwargs):
         hora_br = datetime.now(fuso_br).strftime("%H:%M:%S")
         msg = " ".join(str(a) for a in args)
         LOGS_RECENTES.append(f"[{hora_br}] {msg}")
-        if len(LOGS_RECENTES) > 300:
+        if len(LOGS_RECENTES) > 800:
             LOGS_RECENTES.pop(0)
     except Exception:
         pass
@@ -63,9 +63,9 @@ ALLOWED_EXTENSIONS = {
 # Janela de silêncio: aguarda 15s sem novos e-mails do mesmo remetente antes de fechar o lote,
 # garantindo tempo suficiente para envio de múltiplos anexos/e-mails.
 JANELA_SILENCIO_SEGUNDOS = max(60, int(os.environ.get("JANELA_SILENCIO_SEGUNDOS", 60)))
-# Janela máxima: se novos e-mails continuarem chegando sem parar, após 300s (5 min)
+# Janela máxima: se novos e-mails continuarem chegando sem parar, após 600s (10 min)
 # fechamos o lote atual para não reter indefinidamente os documentos já recebidos.
-JANELA_MAXIMA_SEGUNDOS = int(os.environ.get("JANELA_MAXIMA_SEGUNDOS", 300))
+JANELA_MAXIMA_SEGUNDOS = int(os.environ.get("JANELA_MAXIMA_SEGUNDOS", 600))
 
 # Dicionário em memória com os lotes acumulados
 # Chave: remetente_email (minúsculas)
@@ -388,10 +388,10 @@ def coletar_novos_emails():
                 if mid not in ids_candidatos:
                     ids_candidatos.append(mid)
 
-        # 2. Busca os ultimos 100 e-mails da caixa (para capturar lotes grandes e conversas agrupadas)
+        # 2. Busca os ultimos 200 e-mails da caixa (para capturar lotes grandes e conversas agrupadas)
         status_all, msgs_all = imap.search(None, "ALL")
         if status_all == "OK" and msgs_all[0]:
-            for mid in msgs_all[0].split()[-100:]:
+            for mid in msgs_all[0].split()[-200:]:
                 if mid not in ids_candidatos:
                     ids_candidatos.append(mid)
 

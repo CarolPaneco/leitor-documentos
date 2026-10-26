@@ -564,7 +564,7 @@ def status_watcher():
                 "janela_silencio_segundos": JANELA_SILENCIO_SEGUNDOS,
                 "lotes_pendentes": lotes_info,
                 "total_emails_processados_sessao": len(EMAILS_PROCESSADOS_IDS),
-                "logs_recentes": LOGS_RECENTES[-200:],
+                "logs_recentes": LOGS_RECENTES[-400:],
             }), 200
 
         def get_log_class(txt):
@@ -579,7 +579,7 @@ def status_watcher():
             return "log-line"
 
         # Renderiza página web limpa com UMA LINHA PARA CADA LOG
-        linhas_html = "".join(f"<div class='{get_log_class(log)}'>{pyhtml.escape(log)}</div>" for log in LOGS_RECENTES[-200:])
+        linhas_html = "".join(f"<div class='{get_log_class(log)}'>{pyhtml.escape(log)}</div>" for log in LOGS_RECENTES[-400:])
         if not linhas_html:
             linhas_html = "<div class='log-empty'>Aguardando novos eventos...</div>"
 
