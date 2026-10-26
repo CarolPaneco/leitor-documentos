@@ -33,3 +33,4 @@ EXPOSE 7860
 
 # Executa com python -m gunicorn para garantir que o binário seja encontrado em qualquer PATH
 CMD ["sh", "-c", "python -m gunicorn --bind 0.0.0.0:${PORT:-7860} --workers 1 --threads 4 --timeout 300 --capture-output --enable-stdio-inheritance app:app"]
+

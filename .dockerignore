@@ -11,3 +11,4 @@ database/*.db
 .env
 .venv
 venv/
+

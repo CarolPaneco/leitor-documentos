@@ -17,11 +17,36 @@ import json
 import traceback
 from typing import Any, Dict, List, Tuple
 
+import shutil
 import cv2
 import numpy as np
 import pymupdf
 import pytesseract
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+def _configurar_tesseract():
+    # 1. Se tesseract estiver no PATH (ex.: Linux, Docker no Render), usa diretamente
+    tess_path = shutil.which("tesseract")
+    if tess_path:
+        pytesseract.pytesseract.tesseract_cmd = tess_path
+        return
+
+    # 2. Caminhos conhecidos no Windows
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    candidatos = [
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        os.path.join(base_dir, "tesseract", "tesseract.exe"),
+        os.path.join(os.path.dirname(__file__), "..", "tesseract", "tesseract.exe"),
+    ]
+    for c in candidatos:
+        if os.path.exists(c):
+            pytesseract.pytesseract.tesseract_cmd = c
+            tessdata_dir = os.path.join(os.path.dirname(c), "tessdata")
+            if os.path.exists(tessdata_dir) and not os.environ.get("TESSDATA_PREFIX"):
+                os.environ["TESSDATA_PREFIX"] = tessdata_dir
+            return
+
+_configurar_tesseract()
 
 from pytesseract import Output
 
