@@ -447,46 +447,79 @@ def enviar_resposta_email(destinatario, assunto_original, linhas, docs_info, err
     print(f"[EMAIL] Resposta enviada com sucesso para: {destinatario} ({qtd_docs} doc(s), {len(linhas)} linha(s))")
 
 
-def _marcar_email_lido(imap, uid_str):
-    """Marca com firmeza a mensagem como lida (\\Seen) no Gmail via IMAP UID."""
-    try:
-        res, _ = imap.uid("store", str(uid_str), "+FLAGS", "(\\Seen)")
-        if res != "OK":
-            res, _ = imap.uid("store", str(uid_str), "+FLAGS", "\\Seen")
-        return res == "OK"
-    except Exception as e:
-        print(f"[IMAP] Falha ao marcar UID {uid_str} como lido: {e}")
-        return False
+def conectar_imap(max_tentativas=3):
+    """Abre e autentica conexão segura com Gmail IMAP com retentativas automáticas."""
+    for tentativa in range(1, max_tentativas + 1):
+        try:
+            imap = imaplib.IMAP4_SSL("imap.gmail.com", timeout=35)
+            imap.login(GMAIL_USER, GMAIL_PASS)
+            imap.select("INBOX", readonly=False)
+            return imap
+        except Exception as e:
+            if tentativa == max_tentativas:
+                raise e
+            time.sleep(2)
 
 
-def coletar_novos_emails():
+def marcar_uids_como_lidos(imap, lista_uids):
+    """
+    Marca uma lista de UIDs como lidos (\\Seen) no Gmail em lote único rápido.
+    Se a conexão oscilar (Broken pipe), reconecta automaticamente e conclui com sucesso.
+    """
+    if not lista_uids:
+        return imap
+    uids_strs = [u.decode() if isinstance(u, bytes) else str(u) for u in lista_uids if u]
+    if not uids_strs:
+        return imap
+    for i in range(0, len(uids_strs), 40):
+        bloco = ",".join(uids_strs[i:i+40])
+        sucesso = False
+        for _ in range(2):
+            try:
+                imap.uid("store", bloco, "+FLAGS", "\\Seen")
+                imap.expunge()
+                sucesso = True
+                break
+            except (BrokenPipeError, OSError, imaplib.IMAP4.abort, imaplib.IMAP4.error) as err:
+                print(f"[IMAP] Conexão oscilou ({err}). Reconectando para confirmar marcação como lido...")
+                try:
+                    imap = conectar_imap()
+                except Exception:
+                    pass
+        if not sucesso:
+            print(f"[IMAP WARN] Não foi possível marcar bloco de UIDs como lidos no Gmail: {bloco[:30]}...")
+    return imap
+
+
+def coletar_novos_emails(limite_por_ciclo=30):
     """
     Busca novos e-mails na caixa de entrada do Gmail.
-    Garante que múltiplos arquivos (enviados juntos no mesmo e-mail OU enviados
-    em e-mails separados agrupados na mesma conversa pelo Gmail) sejam 100% detectados.
-    Utiliza IMAP UID para garantir identificadores imutáveis e persistentes.
+    Garante que cada e-mail baixado seja marcado imediatamente como lido no Gmail,
+    com reconexão automática contra Broken Pipe e paginação de até 30 e-mails por ciclo.
     """
+    imap = None
     try:
-        imap = imaplib.IMAP4_SSL("imap.gmail.com")
-        imap.login(GMAIL_USER, GMAIL_PASS)
-        imap.select("INBOX")
+        imap = conectar_imap()
 
-        uids_unseen = []
+        # 1. Busca e-mails não lidos (UNSEEN)
         status_unseen, msgs_unseen = imap.uid("search", None, "UNSEEN")
-        if status_unseen == "OK" and msgs_unseen[0]:
-            uids_unseen = msgs_unseen[0].split()
+        uids_unseen = msgs_unseen[0].split() if (status_unseen == "OK" and msgs_unseen[0]) else []
 
-        # 1. Imediatamente marca como lidos no Gmail todos os UNSEEN que já foram processados anteriormente!
-        # Isso limpa a caixa de entrada para que e-mails já tratados não continuem como "não lidos".
-        for u in uids_unseen:
-            uid_str = u.decode()
-            if f"UID:{uid_str}" in EMAILS_PROCESSADOS_IDS:
-                _marcar_email_lido(imap, uid_str)
+        # 2. Se houver e-mails não lidos que já constam no histórico persistente de processados,
+        # marca todos como lidos imediatamente em lote único rápido!
+        uids_para_limpar = [
+            u for u in uids_unseen
+            if f"UID:{u.decode()}" in EMAILS_PROCESSADOS_IDS
+        ]
+        if uids_para_limpar:
+            print(f"[IMAP] Marcando {len(uids_para_limpar)} e-mail(s) já finalizados como lidos no Gmail...")
+            imap = marcar_uids_como_lidos(imap, uids_para_limpar)
 
+        # 3. Busca recentes para conversas
         uids_all = []
         status_all, msgs_all = imap.uid("search", None, "ALL")
         if status_all == "OK" and msgs_all[0]:
-            uids_all = msgs_all[0].split()[-200:]
+            uids_all = msgs_all[0].split()[-100:]
 
         candidatos = []
         # Mensagens não lidas (UNSEEN) têm prioridade absoluta (is_unseen=True)
@@ -499,34 +532,35 @@ def coletar_novos_emails():
                 candidatos.append((u, False))
 
         # Filtra antecipadamente UIDs que já estão no histórico em memória para poupar chamadas IMAP
-        candidatos_pendentes = []
-        for u, is_u in candidatos:
-            uid_str = u.decode()
-            if f"UID:{uid_str}" not in EMAILS_PROCESSADOS_IDS:
-                candidatos_pendentes.append((u, is_u))
+        candidatos_pendentes = [
+            (u, is_u) for (u, is_u) in candidatos
+            if f"UID:{u.decode()}" not in EMAILS_PROCESSADOS_IDS
+        ]
 
         if not candidatos_pendentes:
             try:
-                imap.expunge()
-            except Exception:
-                pass
-            try:
                 imap.close()
-            except Exception:
-                pass
-            try:
                 imap.logout()
             except Exception:
                 pass
             return
 
+        # Limita a 30 e-mails por ciclo para evitar Broken pipe e timeout de socket
+        lote_atual_uids = candidatos_pendentes[:limite_por_ciclo]
         agora = time.time()
+        uids_para_marcar_lidos = []
 
-        for uid_bytes, is_unseen in candidatos_pendentes:
+        for uid_bytes, is_unseen in lote_atual_uids:
             uid_str = uid_bytes.decode()
 
-            # Pega cabeçalho básico primeiro para validar Message-ID e data sem baixar o corpo inteiro
-            status_h, dados_h = imap.uid("fetch", uid_bytes, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE)])")
+            # Pega cabeçalho básico com tratamento de oscilação de conexão
+            status_h, dados_h = None, None
+            try:
+                status_h, dados_h = imap.uid("fetch", uid_bytes, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE)])")
+            except (BrokenPipeError, OSError, imaplib.IMAP4.abort, imaplib.IMAP4.error):
+                imap = conectar_imap()
+                status_h, dados_h = imap.uid("fetch", uid_bytes, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE)])")
+
             if status_h != "OK" or not dados_h:
                 continue
 
@@ -538,10 +572,10 @@ def coletar_novos_emails():
             if message_id_hdr and message_id_hdr in EMAILS_PROCESSADOS_IDS:
                 EMAILS_PROCESSADOS_IDS.add(f"UID:{uid_str}")
                 _salvar_email_processado(f"UID:{uid_str}")
-                _marcar_email_lido(imap, uid_str)
+                uids_para_marcar_lidos.append(uid_str)
                 continue
             if f"UID:{uid_str}" in EMAILS_PROCESSADOS_IDS:
-                _marcar_email_lido(imap, uid_str)
+                uids_para_marcar_lidos.append(uid_str)
                 continue
 
             # Filtro de idade: APENAS para e-mails que JÁ FORAM LIDOS (is_unseen == False).
@@ -560,29 +594,43 @@ def coletar_novos_emails():
                             if message_id_hdr:
                                 EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
                                 _salvar_email_processado(message_id_hdr)
-                            _marcar_email_lido(imap, uid_str)
+                            uids_para_marcar_lidos.append(uid_str)
                             continue
                     except Exception:
                         pass
 
-            # Pausa suave de 80ms entre downloads para respeitar cota de comandos/banda do Gmail (anti-OVERQUOTA)
-            time.sleep(0.08)
+            # Pausa suave de 50ms entre downloads para respeitar cota e evitar que o socket caia
+            time.sleep(0.05)
 
-            # Baixa o e-mail completo para extrair anexos
-            status_f, dados_msg = imap.uid("fetch", uid_bytes, "(RFC822)")
+            # Baixa o e-mail completo com tratamento de reconexão automática
+            status_f, dados_msg = None, None
+            try:
+                status_f, dados_msg = imap.uid("fetch", uid_bytes, "(RFC822)")
+            except (BrokenPipeError, OSError, imaplib.IMAP4.abort, imaplib.IMAP4.error):
+                imap = conectar_imap()
+                status_f, dados_msg = imap.uid("fetch", uid_bytes, "(RFC822)")
+
             if status_f != "OK" or not dados_msg:
                 continue
 
             raw_email = dados_msg[0][1]
             msg = email.message_from_bytes(raw_email)
 
-            # MARCA IMEDIATAMENTE COMO LIDO NO GMAIL ASSIM QUE O CORPO FOR RECEBIDO!
-            _marcar_email_lido(imap, uid_str)
+            # REGISTRA NO HISTÓRICO PERSISTENTE IMEDIATAMENTE
             EMAILS_PROCESSADOS_IDS.add(f"UID:{uid_str}")
             _salvar_email_processado(f"UID:{uid_str}")
             if message_id_hdr:
                 EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
                 _salvar_email_processado(message_id_hdr)
+
+            # Agenda para marcação garantida como lido no Gmail
+            uids_para_marcar_lidos.append(uid_str)
+
+            # Tenta também marcar individualmente na hora
+            try:
+                imap.uid("store", uid_str, "+FLAGS", "\\Seen")
+            except Exception:
+                pass
 
             remetente_raw = msg.get("From", "")
             remetente = _decodificar_cabecalho(remetente_raw)
@@ -664,15 +712,13 @@ def coletar_novos_emails():
             # Salva o estado atualizado no disco
             _salvar_lotes_em_disco()
 
+        # Confirma e marca como lidos no Gmail todos os e-mails processados nesta rodada
+        if uids_para_marcar_lidos:
+            imap = marcar_uids_como_lidos(imap, uids_para_marcar_lidos)
+
         try:
             imap.expunge()
-        except Exception:
-            pass
-        try:
             imap.close()
-        except Exception:
-            pass
-        try:
             imap.logout()
         except Exception:
             pass
@@ -682,9 +728,17 @@ def coletar_novos_emails():
         if any(k in err_msg.upper() for k in ["OVERQUOTA", "BANDWIDTH", "LIMITS"]):
             print(f"[EMAIL OVERQUOTA] Limite temporário de requisições do Gmail atingido ([OVERQUOTA]). O robô aguardará 30s para recompor a cota...")
             time.sleep(30)
+        elif "BROKEN PIPE" in err_msg.upper() or "RESET BY PEER" in err_msg.upper():
+            print(f"[EMAIL RECONNECT] Conexão de rede IMAP resetada (Broken pipe). Reconectando no próximo ciclo...")
         else:
             print(f"[EMAIL INGEST ERROR] Erro na coleta de e-mails: {e}")
             traceback.print_exc()
+    finally:
+        if imap:
+            try:
+                imap.logout()
+            except Exception:
+                pass
 
 
 def processar_lotes_prontos():
