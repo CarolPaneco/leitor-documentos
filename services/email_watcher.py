@@ -654,18 +654,12 @@ def coletar_novos_emails():
                 print(f"[EMAIL BATCH] Novo lote criado para {remetente_email} com {len(anexos)} anexo(s). Aguardando {JANELA_SILENCIO_SEGUNDOS}s por novos arquivos...")
             else:
                 lote = LOTES_PENDENTES[remetente_email]
-                # DEDUPLICAÇÃO inteligente: não duplica anexos com mesmo nome no mesmo lote
-                nomes_existentes = {a["nome"] for a in lote["anexos"]}
-                anexos_novos = [a for a in anexos if a["nome"] not in nomes_existentes]
-                if anexos_novos:
-                    lote["anexos"].extend(anexos_novos)
-                    lote["ultimo_recebimento"] = agora_adicao
-                    lote["qtd_emails"] += 1
-                    if not lote.get("assunto") and assunto:
-                        lote["assunto"] = assunto
-                    print(f"[EMAIL BATCH] +{len(anexos_novos)} anexo(s) adicionados ao lote de {remetente_email}. Total: {len(lote['anexos'])} anexo(s) ({lote['qtd_emails']} e-mails). Cronometro reiniciado para {JANELA_SILENCIO_SEGUNDOS}s!")
-                else:
-                    print(f"[EMAIL BATCH] Documento(s) de {remetente_email} já existiam no lote atual (ignorado duplicata).")
+                lote["anexos"].extend(anexos)
+                lote["ultimo_recebimento"] = agora_adicao
+                lote["qtd_emails"] += 1
+                if not lote.get("assunto") and assunto:
+                    lote["assunto"] = assunto
+                print(f"[EMAIL BATCH] +{len(anexos)} anexo(s) adicionados ao lote de {remetente_email}. Total: {len(lote['anexos'])} anexo(s) ({lote['qtd_emails']} e-mails). Cronometro reiniciado para {JANELA_SILENCIO_SEGUNDOS}s!")
 
             # Salva o estado atualizado no disco
             _salvar_lotes_em_disco()
