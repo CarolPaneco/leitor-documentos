@@ -554,6 +554,26 @@ def api_watcher_verificar_agora():
 
 
 @app.route(
+    "/api/watcher/zerar",
+    methods=["POST", "GET"]
+)
+def api_watcher_zerar():
+    """Zera a fila de lotes pendentes e histórico para permitir recomeçar os envios do zero."""
+    try:
+        from services.email_watcher import limpar_lotes_e_historico
+        limpar_lotes_e_historico()
+        return jsonify({
+            "status": "ok",
+            "mensagem": "Fila e histórico zerados com sucesso! Pronto para começar envios do zero."
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "status": "erro",
+            "mensagem": str(e)
+        }), 500
+
+
+@app.route(
     "/status-watcher",
     methods=["GET"]
 )
@@ -809,6 +829,28 @@ def status_watcher():
             opacity: 0.6;
             cursor: not-allowed;
         }
+        .btn-zerar {
+            background: #991b1b;
+            color: #ffffff;
+            border: 1px solid #ef4444;
+            padding: 7px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-zerar:hover {
+            background: #b91c1c;
+            transform: translateY(-1px);
+        }
+        .btn-zerar:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
         .banner-keepalive {
             background: #0c4a6e;
             border: 1px solid #0284c7;
@@ -847,6 +889,7 @@ def status_watcher():
             <div class="title">🌾 Robô Leitor Agrícola</div>
             <div style="display: flex; align-items: center; gap: 10px;">
                 <button id="btnVerificar" onclick="forcarVerificacao()" class="btn-verificar">⚡ Checar Novos E-mails Agora</button>
+                <button id="btnZerar" onclick="zerarFila()" class="btn-zerar">🗑️ Zerar Fila e Recomeçar</button>
                 <div class="badge-status">● Vigilante 100% Ativo</div>
             </div>
         </div>
@@ -955,6 +998,29 @@ def status_watcher():
                     if (btn) {
                         btn.disabled = false;
                         btn.innerText = "⚡ Checar Novos E-mails Agora";
+                    }
+                }, 1500);
+            }
+        }
+
+        // Função para zerar a fila e recomeçar os envios do zero
+        async function zerarFila() {
+            if (!confirm("Deseja realmente limpar a fila atual e recomeçar os envios do zero?")) return;
+            const btn = document.getElementById("btnZerar");
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = "⏳ Zerando...";
+            }
+            try {
+                await fetch("/api/watcher/zerar", { method: "POST" });
+                await atualizarEmTempoReal();
+            } catch (err) {
+                console.error("Erro ao zerar fila:", err);
+            } finally {
+                setTimeout(() => {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerText = "🗑️ Zerar Fila e Recomeçar";
                     }
                 }, 1500);
             }

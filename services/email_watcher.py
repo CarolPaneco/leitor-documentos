@@ -88,12 +88,12 @@ ALLOWED_EXTENSIONS = {
 }
 
 # Configurações do lote (debounce / agrupamento inteligente)
-# Janela de silêncio: aguarda 15s sem novos e-mails do mesmo remetente antes de fechar o lote,
+# Janela de silêncio: aguarda 60s sem novos e-mails do mesmo remetente antes de fechar o lote,
 # garantindo tempo suficiente para envio de múltiplos anexos/e-mails.
 JANELA_SILENCIO_SEGUNDOS = max(60, int(os.environ.get("JANELA_SILENCIO_SEGUNDOS", 60)))
-# Janela máxima: se novos e-mails continuarem chegando sem parar, após 600s (10 min)
+# Janela máxima: se novos e-mails continuarem chegando sem parar, após 14400s (4 horas)
 # fechamos o lote atual para não reter indefinidamente os documentos já recebidos.
-JANELA_MAXIMA_SEGUNDOS = int(os.environ.get("JANELA_MAXIMA_SEGUNDOS", 600))
+JANELA_MAXIMA_SEGUNDOS = int(os.environ.get("JANELA_MAXIMA_SEGUNDOS", 14400))
 
 def _salvar_lotes_em_disco():
     """Persiste LOTES_PENDENTES em JSON no disco para sobreviver a reinicializações do servidor."""
@@ -175,6 +175,27 @@ def _salvar_email_processado(identificador):
         pass
 
 EMAILS_PROCESSADOS_IDS = _carregar_emails_processados()
+
+
+def limpar_lotes_e_historico():
+    """Limpa todos os lotes pendentes e histórico em memória e disco para permitir recomeçar do zero."""
+    global LOTES_PENDENTES, EMAILS_PROCESSADOS_IDS
+    LOTES_PENDENTES.clear()
+    _salvar_lotes_em_disco()
+    EMAILS_PROCESSADOS_IDS.clear()
+    try:
+        if os.path.exists(HISTORICO_PATH):
+            with open(HISTORICO_PATH, 'w', encoding='utf-8') as f:
+                f.write('')
+    except Exception:
+        pass
+    try:
+        if os.path.exists(LOTES_ANEXOS_DIR):
+            shutil.rmtree(LOTES_ANEXOS_DIR, ignore_errors=True)
+            os.makedirs(LOTES_ANEXOS_DIR, exist_ok=True)
+    except Exception:
+        pass
+    print("[EMAIL BATCH] Fila de lotes e histórico ZERADOS. Pronto para novos envios do zero!")
 
 
 def _decodificar_cabecalho(texto):
@@ -652,12 +673,12 @@ def coletar_novos_emails():
                         caminho_salvo = os.path.join(LOTES_ANEXOS_DIR, nome_salvo)
                         with open(caminho_salvo, "wb") as f_anexo:
                             f_anexo.write(payload)
+                        del payload  # Libera memória RAM imediatamente para evitar estouro em lotes de 200-300 PDFs
 
                         anexos.append({
                             "nome": nome_arquivo,
                             "ext": ext if ext in ALLOWED_EXTENSIONS else ".pdf",
                             "caminho_arquivo": caminho_salvo,
-                            "payload": payload,
                         })
 
             if not anexos:
@@ -804,6 +825,10 @@ def processar_lotes_prontos():
                 p_res = resultado_ocr.get("pasta_saida")
                 if p_res and os.path.exists(p_res):
                     shutil.rmtree(p_res, ignore_errors=True)
+
+                # Força liberação imediata de memória RAM após cada documento processado
+                import gc
+                gc.collect()
 
             if todas_linhas:
                 print(f"[EMAIL BATCH] Sucesso! {len(todas_linhas)} linhas totais consolidadas para {remetente} ({len(docs_info)} arquivos).")
