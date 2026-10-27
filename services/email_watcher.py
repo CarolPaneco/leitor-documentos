@@ -447,6 +447,18 @@ def enviar_resposta_email(destinatario, assunto_original, linhas, docs_info, err
     print(f"[EMAIL] Resposta enviada com sucesso para: {destinatario} ({qtd_docs} doc(s), {len(linhas)} linha(s))")
 
 
+def _marcar_email_lido(imap, uid_str):
+    """Marca com firmeza a mensagem como lida (\\Seen) no Gmail via IMAP UID."""
+    try:
+        res, _ = imap.uid("store", str(uid_str), "+FLAGS", "(\\Seen)")
+        if res != "OK":
+            res, _ = imap.uid("store", str(uid_str), "+FLAGS", "\\Seen")
+        return res == "OK"
+    except Exception as e:
+        print(f"[IMAP] Falha ao marcar UID {uid_str} como lido: {e}")
+        return False
+
+
 def coletar_novos_emails():
     """
     Busca novos e-mails na caixa de entrada do Gmail.
@@ -463,6 +475,13 @@ def coletar_novos_emails():
         status_unseen, msgs_unseen = imap.uid("search", None, "UNSEEN")
         if status_unseen == "OK" and msgs_unseen[0]:
             uids_unseen = msgs_unseen[0].split()
+
+        # 1. Imediatamente marca como lidos no Gmail todos os UNSEEN que já foram processados anteriormente!
+        # Isso limpa a caixa de entrada para que e-mails já tratados não continuem como "não lidos".
+        for u in uids_unseen:
+            uid_str = u.decode()
+            if f"UID:{uid_str}" in EMAILS_PROCESSADOS_IDS:
+                _marcar_email_lido(imap, uid_str)
 
         uids_all = []
         status_all, msgs_all = imap.uid("search", None, "ALL")
@@ -487,7 +506,18 @@ def coletar_novos_emails():
                 candidatos_pendentes.append((u, is_u))
 
         if not candidatos_pendentes:
-            imap.logout()
+            try:
+                imap.expunge()
+            except Exception:
+                pass
+            try:
+                imap.close()
+            except Exception:
+                pass
+            try:
+                imap.logout()
+            except Exception:
+                pass
             return
 
         agora = time.time()
@@ -507,8 +537,11 @@ def coletar_novos_emails():
             # Se este e-mail já foi processado anteriormente nesta sessão ou histórico:
             if message_id_hdr and message_id_hdr in EMAILS_PROCESSADOS_IDS:
                 EMAILS_PROCESSADOS_IDS.add(f"UID:{uid_str}")
+                _salvar_email_processado(f"UID:{uid_str}")
+                _marcar_email_lido(imap, uid_str)
                 continue
             if f"UID:{uid_str}" in EMAILS_PROCESSADOS_IDS:
+                _marcar_email_lido(imap, uid_str)
                 continue
 
             # Filtro de idade: APENAS para e-mails que JÁ FORAM LIDOS (is_unseen == False).
@@ -523,9 +556,11 @@ def coletar_novos_emails():
                         ts_email = dt_email.timestamp()
                         if (agora - ts_email) > 86400:  # Mais de 24 horas e já lido
                             EMAILS_PROCESSADOS_IDS.add(f"UID:{uid_str}")
+                            _salvar_email_processado(f"UID:{uid_str}")
                             if message_id_hdr:
                                 EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
                                 _salvar_email_processado(message_id_hdr)
+                            _marcar_email_lido(imap, uid_str)
                             continue
                     except Exception:
                         pass
@@ -541,6 +576,14 @@ def coletar_novos_emails():
             raw_email = dados_msg[0][1]
             msg = email.message_from_bytes(raw_email)
 
+            # MARCA IMEDIATAMENTE COMO LIDO NO GMAIL ASSIM QUE O CORPO FOR RECEBIDO!
+            _marcar_email_lido(imap, uid_str)
+            EMAILS_PROCESSADOS_IDS.add(f"UID:{uid_str}")
+            _salvar_email_processado(f"UID:{uid_str}")
+            if message_id_hdr:
+                EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
+                _salvar_email_processado(message_id_hdr)
+
             remetente_raw = msg.get("From", "")
             remetente = _decodificar_cabecalho(remetente_raw)
             if "<" in remetente and ">" in remetente:
@@ -552,14 +595,6 @@ def coletar_novos_emails():
 
             # Ignora alertas de sistema
             if any(k in remetente_email for k in ["brevo.com", "google.com", "noreply", "no-reply", "mailer-daemon", "postmaster"]):
-                try:
-                    imap.uid("store", uid_bytes, "+FLAGS", "(\\Seen)")
-                except Exception:
-                    pass
-                EMAILS_PROCESSADOS_IDS.add(f"UID:{uid_str}")
-                if message_id_hdr:
-                    EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
-                    _salvar_email_processado(message_id_hdr)
                 continue
 
             # Extrai TODOS os anexos (suporta múltiplos arquivos no mesmo e-mail e formatos inline)
@@ -601,18 +636,6 @@ def coletar_novos_emails():
                             "payload": payload,
                         })
 
-            # Registra como processado para não duplicar
-            EMAILS_PROCESSADOS_IDS.add(f"UID:{uid_str}")
-            if message_id_hdr:
-                EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
-                _salvar_email_processado(message_id_hdr)
-
-            # Marca como lido no Gmail
-            try:
-                imap.uid("store", uid_bytes, "+FLAGS", "(\\Seen)")
-            except Exception:
-                pass
-
             if not anexos:
                 continue
 
@@ -631,18 +654,34 @@ def coletar_novos_emails():
                 print(f"[EMAIL BATCH] Novo lote criado para {remetente_email} com {len(anexos)} anexo(s). Aguardando {JANELA_SILENCIO_SEGUNDOS}s por novos arquivos...")
             else:
                 lote = LOTES_PENDENTES[remetente_email]
-                lote["anexos"].extend(anexos)
-                # REINICIA o cronômetro a partir do último arquivo/e-mail adicionado
-                lote["ultimo_recebimento"] = agora_adicao
-                lote["qtd_emails"] += 1
-                if not lote.get("assunto") and assunto:
-                    lote["assunto"] = assunto
-                print(f"[EMAIL BATCH] +{len(anexos)} anexo(s) adicionados ao lote de {remetente_email}. Total: {len(lote['anexos'])} anexo(s) ({lote['qtd_emails']} e-mails). Cronometro reiniciado para {JANELA_SILENCIO_SEGUNDOS}s!")
+                # DEDUPLICAÇÃO inteligente: não duplica anexos com mesmo nome no mesmo lote
+                nomes_existentes = {a["nome"] for a in lote["anexos"]}
+                anexos_novos = [a for a in anexos if a["nome"] not in nomes_existentes]
+                if anexos_novos:
+                    lote["anexos"].extend(anexos_novos)
+                    lote["ultimo_recebimento"] = agora_adicao
+                    lote["qtd_emails"] += 1
+                    if not lote.get("assunto") and assunto:
+                        lote["assunto"] = assunto
+                    print(f"[EMAIL BATCH] +{len(anexos_novos)} anexo(s) adicionados ao lote de {remetente_email}. Total: {len(lote['anexos'])} anexo(s) ({lote['qtd_emails']} e-mails). Cronometro reiniciado para {JANELA_SILENCIO_SEGUNDOS}s!")
+                else:
+                    print(f"[EMAIL BATCH] Documento(s) de {remetente_email} já existiam no lote atual (ignorado duplicata).")
 
             # Salva o estado atualizado no disco
             _salvar_lotes_em_disco()
 
-        imap.logout()
+        try:
+            imap.expunge()
+        except Exception:
+            pass
+        try:
+            imap.close()
+        except Exception:
+            pass
+        try:
+            imap.logout()
+        except Exception:
+            pass
 
     except Exception as e:
         err_msg = str(e)
