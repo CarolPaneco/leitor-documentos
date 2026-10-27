@@ -1607,7 +1607,7 @@ def _iniciar_vigilante_se_apropriado():
     try:
         import threading
         from services.email_watcher import loop_vigilante_email
-        _email_thread = threading.Thread(target=loop_vigilante_email, args=(5,), daemon=True)
+        _email_thread = threading.Thread(target=loop_vigilante_email, args=(10,), daemon=True)
         _email_thread.start()
         print("[APP] Vigilante de e-mails iniciado em segundo plano!")
     except Exception as _e:

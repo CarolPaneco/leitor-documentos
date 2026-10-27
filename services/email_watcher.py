@@ -479,13 +479,20 @@ def coletar_novos_emails():
             if u not in [c[0] for c in candidatos]:
                 candidatos.append((u, False))
 
-        if not candidatos:
+        # Filtra antecipadamente UIDs que já estão no histórico em memória para poupar chamadas IMAP
+        candidatos_pendentes = []
+        for u, is_u in candidatos:
+            uid_str = u.decode()
+            if f"UID:{uid_str}" not in EMAILS_PROCESSADOS_IDS:
+                candidatos_pendentes.append((u, is_u))
+
+        if not candidatos_pendentes:
             imap.logout()
             return
 
         agora = time.time()
 
-        for uid_bytes, is_unseen in candidatos:
+        for uid_bytes, is_unseen in candidatos_pendentes:
             uid_str = uid_bytes.decode()
 
             # Pega cabeçalho básico primeiro para validar Message-ID e data sem baixar o corpo inteiro
@@ -499,6 +506,7 @@ def coletar_novos_emails():
 
             # Se este e-mail já foi processado anteriormente nesta sessão ou histórico:
             if message_id_hdr and message_id_hdr in EMAILS_PROCESSADOS_IDS:
+                EMAILS_PROCESSADOS_IDS.add(f"UID:{uid_str}")
                 continue
             if f"UID:{uid_str}" in EMAILS_PROCESSADOS_IDS:
                 continue
@@ -521,6 +529,9 @@ def coletar_novos_emails():
                             continue
                     except Exception:
                         pass
+
+            # Pausa suave de 80ms entre downloads para respeitar cota de comandos/banda do Gmail (anti-OVERQUOTA)
+            time.sleep(0.08)
 
             # Baixa o e-mail completo para extrair anexos
             status_f, dados_msg = imap.uid("fetch", uid_bytes, "(RFC822)")
@@ -634,8 +645,13 @@ def coletar_novos_emails():
         imap.logout()
 
     except Exception as e:
-        print(f"[EMAIL INGEST ERROR] Erro na coleta de e-mails: {e}")
-        traceback.print_exc()
+        err_msg = str(e)
+        if any(k in err_msg.upper() for k in ["OVERQUOTA", "BANDWIDTH", "LIMITS"]):
+            print(f"[EMAIL OVERQUOTA] Limite temporário de requisições do Gmail atingido ([OVERQUOTA]). O robô aguardará 30s para recompor a cota...")
+            time.sleep(30)
+        else:
+            print(f"[EMAIL INGEST ERROR] Erro na coleta de e-mails: {e}")
+            traceback.print_exc()
 
 
 def processar_lotes_prontos():
@@ -791,7 +807,7 @@ def forcar_verificacao_emails():
     processar_lotes_prontos()
 
 
-def loop_vigilante_email(intervalo_segundos=5):
+def loop_vigilante_email(intervalo_segundos=10):
     print(f"[EMAIL WORKER] Vigilante de e-mail iniciado para {GMAIL_USER} (intervalo: {intervalo_segundos}s, janela silêncio: {JANELA_SILENCIO_SEGUNDOS}s)")
 
     # Inicia o auto-keepalive em thread daemon separada
