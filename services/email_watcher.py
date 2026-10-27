@@ -515,19 +515,11 @@ def coletar_novos_emails():
 
         ids_candidatos = []
 
-        # 1. Busca e-mails não lidos (UNSEEN) sem qualquer restrição de limite
+        # 1. Busca ESTRITAMENTE e-mails NÃO LIDOS (UNSEEN)
+        # Regra absoluta: Se o e-mail já foi lido no Gmail, o robô NUNCA deve tocar nele!
         status_unseen, msgs_unseen = imap.search(None, "UNSEEN")
-        unseen_set = set()
         if status_unseen == "OK" and msgs_unseen[0]:
             for mid in msgs_unseen[0].split():
-                unseen_set.add(mid)
-                if mid not in ids_candidatos:
-                    ids_candidatos.append(mid)
-
-        # 2. Busca até os últimos 500 e-mails para cobrir casos de conversas e mensagens agrupadas
-        status_all, msgs_all = imap.search(None, "ALL")
-        if status_all == "OK" and msgs_all[0]:
-            for mid in msgs_all[0].split()[-500:]:
                 if mid not in ids_candidatos:
                     ids_candidatos.append(mid)
 
@@ -578,28 +570,6 @@ def coletar_novos_emails():
             if uid_num and f"UID:{uid_num}" in EMAILS_PROCESSADOS_IDS:
                 imap = marcar_como_lido(imap, msg_id, uid_num)
                 continue
-
-            # Filtro de idade: APENAS para e-mails que JÁ ESTAVAM LIDOS (não são UNSEEN).
-            # E-mails NÃO LIDOS (UNSEEN) NUNCA são descartados!
-            eh_unseen = (msg_id in unseen_set)
-            if not eh_unseen:
-                date_raw = hdr_msg.get("Date")
-                if date_raw:
-                    try:
-                        from email.utils import parsedate_to_datetime
-                        dt_email = parsedate_to_datetime(date_raw)
-                        ts_email = dt_email.timestamp()
-                        if (agora - ts_email) > 86400:  # Mais de 24 horas e já lido
-                            if message_id_hdr:
-                                EMAILS_PROCESSADOS_IDS.add(message_id_hdr)
-                                _salvar_email_processado(message_id_hdr)
-                            if uid_num:
-                                EMAILS_PROCESSADOS_IDS.add(f"UID:{uid_num}")
-                                _salvar_email_processado(f"UID:{uid_num}")
-                            imap = marcar_como_lido(imap, msg_id, uid_num)
-                            continue
-                    except Exception:
-                        pass
 
             # Pausa suave de 50ms para evitar sobrecarga de rede
             time.sleep(0.05)
