@@ -574,6 +574,39 @@ def api_watcher_zerar():
 
 
 @app.route(
+    "/api/watcher/logs-historico",
+    methods=["GET"]
+)
+def api_watcher_logs_historico():
+    """Retorna o histórico detalhado dos logs do arquivo em disco, filtrando heartbeats."""
+    try:
+        from services.email_watcher import LOGS_FILE, LOGS_RECENTES
+        linhas = []
+        if os.path.exists(LOGS_FILE):
+            with open(LOGS_FILE, "r", encoding="utf-8", errors="replace") as f:
+                linhas = [l.strip() for l in f if l.strip()]
+        else:
+            linhas = list(LOGS_RECENTES)
+        
+        # Filtra linhas importantes (remove flood de 'Monitorando caixa...')
+        relevantes = [
+            l for l in linhas 
+            if not ("Monitorando caixa de entrada" in l or "Auto-ping" in l)
+        ]
+        return jsonify({
+            "status": "ok",
+            "total_linhas": len(linhas),
+            "relevantes": relevantes[-200:],
+            "ultimas_50": linhas[-50:],
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "status": "erro",
+            "mensagem": str(e)
+        }), 500
+
+
+@app.route(
     "/status-watcher",
     methods=["GET"]
 )
