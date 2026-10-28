@@ -504,6 +504,9 @@ def processar_arquivo_temporario(
                 except Exception:
                     pass
 
+        import gc
+        gc.collect()
+
 
 # ============================================================
 # PÁGINA
@@ -1456,6 +1459,9 @@ def api_processar_e_gerar_excel():
                     shutil.rmtree(pasta_res, ignore_errors=True)
                 except Exception:
                     pass
+
+        import gc
+        gc.collect()
 
 
 # ============================================================

@@ -377,141 +377,79 @@ async function processar() {
 
 
             // ----------------------------------------------
-            // ENVIA SOMENTE UM ARQUIVO
+            // ENVIA COM RETENTATIVAS AUTOMATICAS (RESILIENTE)
             // ----------------------------------------------
+            let dados = null;
+            let ultimoErro = null;
+            const maxTentativas = 3;
 
-            const formData =
-                new FormData();
+            for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
+                try {
+                    const formData = new FormData();
+                    formData.append("arquivo", arquivo);
 
-
-            formData.append(
-                "arquivo",
-                arquivo
-            );
-
-
-            try {
-
-                const resposta =
-                    await fetch(
+                    const resposta = await fetch(
                         "/api/processar-arquivo",
                         {
-                            method:
-                                "POST",
-
-                            body:
-                                formData
+                            method: "POST",
+                            body: formData
                         }
                     );
 
-
-                // ------------------------------------------
-                // VERIFICA RESPOSTA
-                // ------------------------------------------
-
-                if (
-                    !resposta.ok
-                ) {
-
-                    let erro =
-                        "Erro ao processar o arquivo.";
-
-
-                    try {
-
-                        const dadosErro =
-                            await resposta.json();
-
-
-                        erro =
-                            dadosErro.erro ||
-                            erro;
-
-                    } catch (_) {
-
-                        // Mantém erro padrão.
-
+                    if (!resposta.ok) {
+                        let erro = "Erro ao processar o arquivo.";
+                        try {
+                            const dadosErro = await resposta.json();
+                            erro = dadosErro.erro || erro;
+                        } catch (_) {
+                            // Mantem erro padrao.
+                        }
+                        throw new Error(erro);
                     }
 
+                    dados = await resposta.json();
+                    if (!dados.sucesso) {
+                        throw new Error(
+                            dados.erro || "Não foi possível processar o arquivo."
+                        );
+                    }
 
-                    throw new Error(
-                        erro
-                    );
+                    ultimoErro = null;
+                    break;
+                } catch (erroTentativa) {
+                    ultimoErro = erroTentativa;
+                    const msg = erroTentativa.message || "";
+                    const ehErroRede = msg.includes("Failed to fetch") ||
+                        msg.includes("NetworkError") ||
+                        msg.includes("Load failed") ||
+                        msg.includes("Network request failed") ||
+                        msg.includes("504") ||
+                        msg.includes("502");
 
+                    if (ehErroRede && tentativa < maxTentativas) {
+                        console.warn(`Conexão oscilou no arquivo ${arquivo.name}. Aguardando reconexão (${tentativa}/${maxTentativas})...`);
+                        progressoTexto.textContent = `Aguardando servidor (${tentativa}/${maxTentativas}): ${arquivo.name}`;
+                        await new Promise(r => setTimeout(r, tentativa * 3000));
+                    } else {
+                        break;
+                    }
                 }
+            }
 
-
-                const dados =
-                    await resposta.json();
-
-
-                if (
-                    !dados.sucesso
-                ) {
-
-                    throw new Error(
-                        dados.erro ||
-                        "Não foi possível processar o arquivo."
-                    );
-
-                }
-
-
-                // ------------------------------------------
-                // GUARDA AS LINHAS
-                // ------------------------------------------
-
-                if (
-                    Array.isArray(
-                        dados.linhas
-                    )
-                ) {
-
-                    todasLinhas.push(
-                        ...dados.linhas
-                    );
-
-                }
-
-
-                arquivosProcessados.push(
-                    arquivo.name
-                );
-
-
-                // ------------------------------------------
-                // ATUALIZA PROGRESSO
-                // ------------------------------------------
-
-                const progressoFinal =
-                    (
-                        numeroAtual /
-                        arquivosAtuais.length
-                    ) * 100;
-
-
-                barraProgresso.style.width =
-                    `${progressoFinal}%`;
-
-
-            } catch (erroArquivo) {
-
-                console.error(
-                    `Erro no arquivo ${arquivo.name}:`,
-                    erroArquivo
-                );
-
-
+            if (ultimoErro) {
+                console.error(`Erro definitivo no arquivo ${arquivo.name}:`, ultimoErro);
                 erros.push({
-
-                    arquivo:
-                        arquivo.name,
-
-                    erro:
-                        erroArquivo.message
-
+                    arquivo: arquivo.name,
+                    erro: ultimoErro.message
                 });
+            } else if (dados) {
+                if (Array.isArray(dados.linhas)) {
+                    todasLinhas.push(...dados.linhas);
+                }
+                arquivosProcessados.push(arquivo.name);
 
+                const progressoFinal = (numeroAtual / arquivosAtuais.length) * 100;
+                barraProgresso.style.width = `${progressoFinal}%`;
             }
 
         }
@@ -938,14 +876,26 @@ function mostrarErros(
 
     mensagem.innerHTML +=
         `
-        <div
-            class="erros-parciais"
-        >
-
+        <div class="erros-parciais">
+            <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <span style="font-weight: 600; color: #f87171;">Arquivos com falha de conexão (${erros.length}):</span>
+                <button id="btnReprocessarErros" type="button" class="btn-primary" style="padding: 8px 16px; font-size: 13px; background: #eab308; border-color: #ca8a04; color: #18181b; cursor: pointer; border-radius: 6px; font-weight: 700;">
+                    🔄 Reprocessar Apenas os ${erros.length} Arquivos com Erro
+                </button>
+            </div>
             ${lista}
-
         </div>
         `;
+
+    const btnRetry = document.getElementById("btnReprocessarErros");
+    if (btnRetry) {
+        btnRetry.addEventListener("click", () => {
+            const nomesErros = new Set(erros.map(e => e.arquivo));
+            arquivosAtuais = arquivosAtuais.filter(a => nomesErros.has(a.name));
+            mostrarArquivos();
+            processar();
+        });
+    }
 
 }
 
