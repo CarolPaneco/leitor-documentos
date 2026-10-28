@@ -458,14 +458,16 @@ def enviar_resposta_email(destinatario, assunto_original, linhas, docs_info, err
             print(f"[EMAIL] Resposta enviada com sucesso via Brevo API para: {destinatario} ({qtd_docs} doc(s), {len(linhas)} linha(s))")
             return
         except Exception as e:
-            print(f"[EMAIL ERROR] Falha no envio via Brevo API: {e}")
-            raise e
+            print(f"[EMAIL ERROR] Falha no envio via Brevo API: {e}. Tentando fallback via SMTP Gmail...")
 
     # 2. Fallback: SMTP tradicional via Gmail (funciona em ambiente local ou servidores com porta liberada)
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-        smtp.login(GMAIL_USER, GMAIL_PASS)
-        smtp.sendmail(GMAIL_USER, [destinatario], msg.as_string())
-    print(f"[EMAIL] Resposta enviada com sucesso para: {destinatario} ({qtd_docs} doc(s), {len(linhas)} linha(s))")
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
+            smtp.login(GMAIL_USER, GMAIL_PASS)
+            smtp.sendmail(GMAIL_USER, [destinatario], msg.as_string())
+        print(f"[EMAIL] Resposta enviada com sucesso via SMTP para: {destinatario} ({qtd_docs} doc(s), {len(linhas)} linha(s))")
+    except Exception as e_smtp:
+        print(f"[EMAIL ERROR] Falha também no envio via SMTP Gmail: {e_smtp}")
 
 
 def conectar_imap(max_tentativas=3):
@@ -746,59 +748,70 @@ def processar_lotes_prontos():
 
         try:
             for idx, item in enumerate(lote["anexos"], start=1):
-                nome_arq = item["nome"]
-                ext = item["ext"]
-                caminho_orig = item.get("caminho_arquivo")
+                nome_arq = item.get("nome", f"doc_{idx}")
+                try:
+                    ext = item.get("ext", ".pdf")
+                    caminho_orig = item.get("caminho_arquivo")
 
-                caminho_arq = os.path.join(pasta_temp, f"doc_{idx}_{uuid.uuid4().hex[:6]}{ext}")
-                if caminho_orig and os.path.exists(caminho_orig):
-                    shutil.copy2(caminho_orig, caminho_arq)
-                elif item.get("payload"):
-                    with open(caminho_arq, "wb") as f:
-                        f.write(item["payload"])
-                else:
-                    print(f"[EXTRACAO ERRO] Arquivo não acessível: {nome_arq}")
-                    continue
+                    caminho_arq = os.path.join(pasta_temp, f"doc_{idx}_{uuid.uuid4().hex[:6]}{ext}")
+                    if caminho_orig and os.path.exists(caminho_orig):
+                        shutil.copy2(caminho_orig, caminho_arq)
+                    elif item.get("payload"):
+                        with open(caminho_arq, "wb") as f:
+                            f.write(item["payload"])
+                    else:
+                        print(f"[EXTRACAO ERRO] Arquivo não acessível: {nome_arq}")
+                        continue
 
-                doc_id = datetime.now().strftime("%Y%m%d_%H%M%S") + f"_{idx}_" + uuid.uuid4().hex[:6]
-                resultado_ocr = processor.processar(caminho_arq, doc_id)
+                    doc_id = datetime.now().strftime("%Y%m%d_%H%M%S") + f"_{idx}_" + uuid.uuid4().hex[:6]
+                    resultado_ocr = processor.processar(caminho_arq, doc_id)
 
-                linhas_doc = []
-                bloco_doc = ""
-                prop_doc = ""
+                    linhas_doc = []
+                    bloco_doc = ""
+                    prop_doc = ""
 
-                if resultado_ocr.get("sucesso"):
-                    print(f"[EXTRACAO] Analisando tabelas e talhoes ({nome_arq})...")
-                    doc = extrair_dados(resultado_ocr)
-                    print(f"[EXTRACAO] Validando campos e montando linhas...")
-                    doc = validar_documento(doc)
-                    linhas_doc = extrair_linhas_para_excel(doc)
-                    print(f"[EXTRACAO] {len(linhas_doc)} talhao(oes) identificado(s) em {nome_arq}.")
-                    todas_linhas.extend(linhas_doc)
+                    if resultado_ocr.get("sucesso"):
+                        print(f"[EXTRACAO] Analisando tabelas e talhoes ({nome_arq})...")
+                        doc = extrair_dados(resultado_ocr)
+                        print(f"[EXTRACAO] Validando campos e montando linhas...")
+                        doc = validar_documento(doc)
+                        linhas_doc = extrair_linhas_para_excel(doc)
+                        print(f"[EXTRACAO] {len(linhas_doc)} talhao(oes) identificado(s) em {nome_arq}.")
+                        todas_linhas.extend(linhas_doc)
 
-                    meta = doc.get("metadata") or {}
-                    bloco_doc = str(meta.get("bloco") or doc.get("bloco") or "").strip()
-                    prop_doc = str(meta.get("propriedade") or doc.get("propriedade") or "").strip()
-                else:
-                    err_msg = resultado_ocr.get("erro", "Falha desconhecida no OCR")
-                    print(f"[EXTRACAO ERRO] Falha ao processar {nome_arq}: {err_msg}")
+                        meta = doc.get("metadata") or {}
+                        bloco_doc = str(meta.get("bloco") or doc.get("bloco") or "").strip()
+                        prop_doc = str(meta.get("propriedade") or doc.get("propriedade") or "").strip()
+                    else:
+                        err_msg = resultado_ocr.get("erro", "Falha desconhecida no OCR")
+                        print(f"[EXTRACAO ERRO] Falha ao processar {nome_arq}: {err_msg}")
 
-                docs_info.append({
-                    "nome": nome_arq,
-                    "sucesso": bool(linhas_doc),
-                    "qtd_talhoes": len(linhas_doc),
-                    "bloco": bloco_doc,
-                    "propriedade": prop_doc,
-                })
+                    docs_info.append({
+                        "nome": nome_arq,
+                        "sucesso": bool(linhas_doc),
+                        "qtd_talhoes": len(linhas_doc),
+                        "bloco": bloco_doc,
+                        "propriedade": prop_doc,
+                    })
 
-                # Limpa pasta temporária do OCR
-                p_res = resultado_ocr.get("pasta_saida")
-                if p_res and os.path.exists(p_res):
-                    shutil.rmtree(p_res, ignore_errors=True)
+                    # Limpa pasta temporária do OCR
+                    p_res = resultado_ocr.get("pasta_saida")
+                    if p_res and os.path.exists(p_res):
+                        shutil.rmtree(p_res, ignore_errors=True)
 
-                # Força liberação imediata de memória RAM após cada documento processado
-                import gc
-                gc.collect()
+                except Exception as e_item:
+                    print(f"[EXTRACAO ERRO] Exceção ao processar {nome_arq}: {e_item}")
+                    docs_info.append({
+                        "nome": nome_arq,
+                        "sucesso": False,
+                        "qtd_talhoes": 0,
+                        "bloco": "",
+                        "propriedade": "",
+                    })
+                finally:
+                    # Força liberação imediata de memória RAM após cada documento processado
+                    import gc
+                    gc.collect()
 
             if todas_linhas:
                 print(f"[EMAIL BATCH] Sucesso! {len(todas_linhas)} linhas totais consolidadas para {remetente} ({len(docs_info)} arquivos).")
