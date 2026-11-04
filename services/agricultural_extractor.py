@@ -4696,34 +4696,40 @@ def _v11_ocr_celula(imagem, x1, y1, x2, y2, campo):
     x2 = min(w, int(x2))
     y2 = min(h, int(y2))
 
-    if x2 <= x1 or y2 <= y1:
+    if x2 - x1 < 5 or y2 - y1 < 5:
         return ""
 
     crop = imagem[y1:y2, x1:x2]
 
-    if crop.size == 0:
+    if crop is None or crop.size == 0 or crop.shape[0] < 5 or crop.shape[1] < 5:
         return ""
 
     # Ampliação pequena para números pequenos da tabela.
-    crop = _cv2_v11.resize(
-        crop,
-        None,
-        fx=3.0,
-        fy=3.0,
-        interpolation=_cv2_v11.INTER_CUBIC,
-    )
+    try:
+        crop = _cv2_v11.resize(
+            crop,
+            None,
+            fx=3.0,
+            fy=3.0,
+            interpolation=_cv2_v11.INTER_CUBIC,
+        )
+    except Exception:
+        return ""
 
     candidatos = []
 
     for psm in (7, 8, 11, 13):
-        texto = _pytesseract_v11.image_to_string(
-            crop,
-            lang="por+eng",
-            config=f"--oem 3 --psm {psm}",
-        ).strip()
+        try:
+            texto = _pytesseract_v11.image_to_string(
+                crop,
+                lang="por+eng",
+                config=f"--oem 3 --psm {psm}",
+            ).strip()
 
-        if texto:
-            candidatos.append(texto)
+            if texto:
+                candidatos.append(texto)
+        except Exception:
+            continue
 
     if not candidatos:
         return ""
@@ -9024,11 +9030,14 @@ def _v17_recuperar_celulas_tabela(processed, registros):
                 valor = ""
 
                 for psm in (7, 11, 8):
-                    texto = _pytesseract_v11.image_to_string(
-                        crop,
-                        lang="por+eng",
-                        config=f"--oem 3 --psm {psm}",
-                    ).strip()
+                    try:
+                        texto = _pytesseract_v11.image_to_string(
+                            crop,
+                            lang="por+eng",
+                            config=f"--oem 3 --psm {psm}",
+                        ).strip()
+                    except Exception:
+                        continue
 
                     if not texto:
                         continue
