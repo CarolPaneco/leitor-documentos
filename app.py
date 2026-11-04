@@ -16,7 +16,7 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 from services.document_processor import get_processor
-from services.agricultural_extractor import extrair_dados
+from services.agricultural_extractor import extrair_dados, limpar_nome_propriedade, limpar_nome_proprietario
 from services.validator import validar_documento
 
 
@@ -91,19 +91,19 @@ def extrair_linhas_excel(documento):
         or {}
     )
 
-    propriedade = str(
+    propriedade = limpar_nome_propriedade(str(
         metadata.get("propriedade")
         or documento.get("propriedade")
         or ""
-    ).strip()
+    ).strip())
 
-    proprietario = str(
+    proprietario = limpar_nome_proprietario(str(
         metadata.get("proprietario")
         or metadata.get("proprietário")
         or documento.get("proprietario")
         or documento.get("proprietário")
         or ""
-    ).strip()
+    ).strip())
 
     municipio = str(
         metadata.get("municipio")
@@ -199,19 +199,19 @@ def extrair_linhas_excel(documento):
                     ).strip(),
 
                 "Propriedade":
-                    str(
+                    limpar_nome_propriedade(str(
                         talhao.get("propriedade")
                         or bloco_prop
                         or ""
-                    ).strip(),
+                    ).strip()),
 
                 "Proprietário":
-                    str(
+                    limpar_nome_proprietario(str(
                         talhao.get("proprietario")
                         or talhao.get("proprietário")
                         or bloco_proprio
                         or ""
-                    ).strip(),
+                    ).strip()),
 
                 "Município":
                     str(

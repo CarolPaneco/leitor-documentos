@@ -7655,12 +7655,22 @@ def _v16_recuperar_metadados(words):
         lambda k: (
             "proprietario" in k
             or "arrendatario" in k
+            or "roprietario" in k
+            or "propristario" in k
+            or "proprieta" in k
+            or "propriet" in k
+            or "oprietario" in k
         )
     )
 
-    if rotulo_prop:
-        ax = _word_x(rotulo_prop)
-        ay = _cy(rotulo_prop)
+    if rotulo_prop or rotulo_propriedade:
+        if rotulo_prop:
+            ax = _word_x(rotulo_prop)
+            ay = _cy(rotulo_prop)
+        else:
+            ax = _word_x(rotulo_propriedade)
+            ay = _cy(rotulo_propriedade) - 58
+
         max_y = ay + 65
         if rotulo_propriedade and _cy(rotulo_propriedade) > ay:
             max_y = min(max_y, _cy(rotulo_propriedade) - 6)
@@ -7677,17 +7687,20 @@ def _v16_recuperar_metadados(words):
                 "area",
                 "status",
                 "carreador",
-                "cana",
                 "total",
                 "vertente",
                 "usina",
                 "dade",
                 "agrupamento",
+                "roprietario",
+                "propristario",
+                "proprieta",
             }:
                 continue
             wx = _word_x(w)
             wy = _cy(w)
-            if ay + 8 < wy <= max_y and ax - 20 <= wx <= ax + 580 and wx < 920:
+            min_y = ay + 5 if rotulo_prop else ay - 10
+            if min_y < wy <= max_y and ax - 20 <= wx <= ax + 580 and wx < 920:
                 if len(t) > 1 or t in {"e"}:
                     cands.append(w)
 
@@ -7719,7 +7732,9 @@ def _v16_recuperar_metadados(words):
                 limpas_prop.append(p)
 
         valor = limpar_valor(" ".join(limpas_prop))
-        valor = re.split(r"\b(?:[AÁ]rea|Carreador|Status|\d+,\d+%)\b", valor, flags=re.I)[0].strip(" |:;,-")
+        valor = re.split(r"\b(?:[ÁA]rea|Carreador|Status|\d+,\d+%)\b", valor, flags=re.I)[0].strip(" |:;,-")
+        if re.match(r"^CEM\b", valor, re.I) and "cana" in valor.lower():
+            valor = re.sub(r"^CEM\b", "CFM", valor, flags=re.I)
 
         if len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", valor)) >= 2:
             resultado["proprietario"] = valor
@@ -9073,15 +9088,34 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
                 r_var_key = _key(str(r.get("variedade", "")))
                 if r_var_key and var_novo_key and r_var_key != var_novo_key:
                     continue
-                # Se ambos têm área e as áreas são diferentes, são sub-talhões/entradas distintas!
+
+                r_plan = str(r.get("plantio", "")).strip()
+                novo_plan = str(novo.get("plantio", "")).strip()
+
+                def _norm_data_local(d):
+                    m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", d)
+                    return f"{int(m.group(1)):02d}/{int(m.group(2)):02d}/{m.group(3)}" if m else d
+
+                r_plan_n = _norm_data_local(r_plan)
+                novo_plan_n = _norm_data_local(novo_plan)
+
+                if r_var_key == var_novo_key and r_plan_n and novo_plan_n and r_plan_n == novo_plan_n:
+                    compativeis.append(r)
+                    continue
+
+                if r.get("origem") in {"ocr_espacial", "v17_mapa_espacial", "sequencia_espacial", "v17_texto_ocr"} and novo.get("origem") == "v18_grade_tabela":
+                    compativeis.append(r)
+                    continue
+
+                if not r_plan and novo_plan:
+                    compativeis.append(r)
+                    continue
+
                 r_area = str(r.get("area", "")).replace(".", ",").strip()
                 novo_area = str(novo.get("area", "")).replace(".", ",").strip()
                 if r_area and novo_area and r_area != novo_area:
                     continue
-                # Se ambos têm plantio e os plantios são diferentes, são entradas distintas!
-                r_plan = str(r.get("plantio", "")).strip()
-                novo_plan = str(novo.get("plantio", "")).strip()
-                if r_plan and novo_plan and r_plan != novo_plan:
+                if r_plan_n and novo_plan_n and r_plan_n != novo_plan_n:
                     continue
                 compativeis.append(r)
 
@@ -9572,6 +9606,76 @@ def _v17_recuperar_metadados_final(processed):
 
 
 
+def limpar_nome_propriedade(valor):
+    """
+    Remove vazamentos de colunas vizinhas (ex: ÁREA TOTAL, CARREADOR, STATUS)
+    e ruídos de OCR (ex: '«(al', '» =]', 'E. pa » =]') de nomes de propriedades.
+    """
+    if not valor:
+        return ""
+    v = " ".join(str(valor).split()).strip(" |:;,-")
+    
+    # 1. Corta qualquer menção a colunas vizinhas (ÁREA TOTAL, CARREADOR, STATUS, etc.)
+    padrao_corte = re.compile(
+        r"(?:[\s|/]+|^)"
+        r"(?:"
+        r"[ÁA]REA\s*TOTAL|[ÁA]REATOTAL|[ÁA]REA\s+DE\s+CARREADOR|[ÁA]REA\s+DE\s+CANA|[ÁA]REA\s+SEM\s+PLANTAR"
+        r"|[ÁA]REA|AREA|TOTAL|CARREADOR|STATUS|LOCALIZA[CÇ][AÃ]O|LEVANTAMENTO|DECLIV(?:\.|IDADE)?"
+        r"|ESCALA|ETAPA|DESENHO|TIPO|DIST[AÂ]NCIA|UNIDADE\s+GESTORA|LATITUDE|LONGITUDE"
+        r")\b.*",
+        re.I
+    )
+    v = padrao_corte.split(v)[0].strip(" |:;,-")
+    
+    # 2. Corta números de área vazados (ex: 88,90 ha ou 36,74 alq)
+    v = re.split(r"\s+\d{1,4}[.,]\d{1,2}\s*(?:ha|alq|al|\b)?", v, maxsplit=1, flags=re.I)[0].strip(" |:;,-")
+    
+    # 3. Limpeza iterativa de caudas com ruído de pontuação/OCR ou abreviações órfãs
+    while True:
+        v_ant = v
+        # Corta cauda iniciada por símbolos ou caracteres não-alfanuméricos (ex: '» =]', '‘(ee', '«(al')
+        v = re.sub(r"[\s|/]+[^A-Za-z0-9À-ÿ\s/]+.*$", "", v).strip(" |:;,-")
+        # Corta abreviações órfãs curtas no final (ex: 'E. pa', 'pa', 'ee')
+        v = re.sub(r"\s+[A-Za-z]{1,2}(?:\s*\.\s*[A-Za-z]{1,2})*\s*$", "", v).strip(" |:;,-")
+        # Remove pontuação residual no final
+        v = re.sub(r"[^A-Za-z0-9À-ÿ)]+$", "", v).strip(" |:;,-")
+        if v == v_ant:
+            break
+
+    return v
+
+
+def limpar_nome_proprietario(valor):
+    """
+    Remove vazamentos de colunas vizinhas e ruídos de OCR do nome do proprietário.
+    """
+    if not valor:
+        return ""
+    v = " ".join(str(valor).split()).strip(" |:;,-")
+    
+    # 1. Corta qualquer menção a colunas vizinhas
+    padrao_corte = re.compile(
+        r"(?:[\s|/]+|^)"
+        r"(?:"
+        r"[ÁA]REA\s*TOTAL|[ÁA]REATOTAL|[ÁA]REA|AREA|TOTAL|CARREADOR|STATUS"
+        r"|LOCALIZA[CÇ][AÃ]O|LEVANTAMENTO|DECLIV|ESCALA|DESENHO|TIPO"
+        r"|UNIDADE\s+GESTORA|\d+,\d+%"
+        r")\b.*",
+        re.I
+    )
+    v = padrao_corte.split(v)[0].strip(" |:;,-")
+    
+    while True:
+        v_ant = v
+        v = re.sub(r"[\s|/]+[^A-Za-z0-9À-ÿ\s/]+.*$", "", v).strip(" |:;,-")
+        v = re.sub(r"\s+[A-Za-z]{1,2}(?:\s*\.\s*[A-Za-z]{1,2})*\s*$", "", v).strip(" |:;,-")
+        v = re.sub(r"[^A-Za-z0-9À-ÿ)]+$", "", v).strip(" |:;,-")
+        if v == v_ant:
+            break
+        
+    return v
+
+
 def _v19_normalizar_municipio_valor(valor):
     """Normaliza município sem inventar informação.
 
@@ -9662,28 +9766,23 @@ def extrair_dados(processed):
 
     if md_texto.get("propriedade"):
         atual_prop = str(md.get("propriedade") or "")
-        if (
-            not atual_prop
-            or ("fazenda" in md_texto["propriedade"].lower() and "fazenda" not in atual_prop.lower())
-            or ("sitio" in _key(md_texto["propriedade"]) and "sitio" not in _key(atual_prop))
-            or (len(md_texto["propriedade"]) > len(atual_prop) + 4 and len(atual_prop.split()) < len(md_texto["propriedade"].split()))
-        ):
-            md["propriedade"] = md_texto["propriedade"]
+        cand_prop = limpar_nome_propriedade(md_texto["propriedade"])
+        if cand_prop:
+            if not atual_prop:
+                md["propriedade"] = cand_prop
+            elif ("fazenda" in cand_prop.lower() and "fazenda" not in atual_prop.lower()):
+                md["propriedade"] = cand_prop
+            elif ("sitio" in _key(cand_prop) and "sitio" not in _key(atual_prop)):
+                md["propriedade"] = cand_prop
+            elif (len(cand_prop) > len(atual_prop) + 4 and len(atual_prop.split()) < len(cand_prop.split())):
+                md["propriedade"] = cand_prop
 
     if md.get("propriedade"):
-        m_prop = re.search(r"((?:Fazenda|S[ií]tio)\b.*)", md["propriedade"], re.I)
-        if m_prop:
-            md["propriedade"] = m_prop.group(1).strip()
-        md["propriedade"] = re.split(r"\s*[|]\s*|\s+\b(?:AREA|ÁREA|TOTAL)\b", md["propriedade"], flags=re.I)[0].strip(" |:;,-")
-        md["propriedade"] = re.split(r"\s+\d{1,3}[.,]\d{1,2}\b", md["propriedade"], maxsplit=1)[0].strip(" |:;,-")
+        md["propriedade"] = limpar_nome_propriedade(md["propriedade"])
 
-    # md = _v17_ocr_metadata_cells(
-    #     processed,
-    #     md,
-    # )
+    if md.get("proprietario"):
+        md["proprietario"] = limpar_nome_proprietario(md["proprietario"])
 
-    # Última limpeza de município: nunca aceita duplicação textual
-    # produzida por OCR como se fosse um novo município.
     if md.get("municipio"):
         md["municipio"] = _v19_normalizar_municipio_valor(
             md["municipio"]
@@ -9783,6 +9882,115 @@ def extrair_dados(processed):
             "bloco": bloco_final,
             "talhoes": resultado["talhoes"],
         }]
+
+    # Fallback refinado via recorte direcionado de celula para municipio
+    if not resultado.get("metadata", {}).get("municipio"):
+        paginas = processed.get("paginas") or processed.get("pages") or []
+        pasta = processed.get("pasta_saida", "")
+        for page_index, page in enumerate(paginas):
+            words = _page_words(page)
+            mun_w = [w for w in words if "munic" in _word_text(w).lower()]
+            if not mun_w:
+                continue
+            caminho_img = _os_v12.path.join(pasta, f"pagina_{page_index + 1:03d}.png")
+            if not _os_v12.path.exists(caminho_img):
+                continue
+            img_p = _cv2_v12.imread(caminho_img)
+            if img_p is None:
+                continue
+            rot = max(mun_w, key=_cy)
+            ax = int(_word_x(rot))
+            ay = int(_cy(rot))
+            y1 = max(0, ay + 6)
+            y2 = min(img_p.shape[0], ay + 42)
+            x1 = max(0, ax - 10)
+            x2 = min(img_p.shape[1], ax + 380)
+            cell_crop = img_p[y1:y2, x1:x2]
+            if cell_crop.size > 0:
+                txt_cell = _pytesseract_v12.image_to_string(cell_crop, lang="por+eng", config="--psm 6").strip()
+                cand_mun = _v19_normalizar_municipio_valor(txt_cell.splitlines()[0] if txt_cell else "")
+                if cand_mun and len(cand_mun) >= 4:
+                    resultado["metadata"]["municipio"] = cand_mun
+                    resultado["municipio"] = cand_mun
+                    for b in resultado.get("blocos") or []:
+                        if not b.get("municipio"):
+                            b["municipio"] = cand_mun
+                    break
+
+    # Fallback refinado via recorte direcionado de celula para proprietario
+    if not resultado.get("metadata", {}).get("proprietario") or "cem cana" in str(resultado.get("metadata", {}).get("proprietario", "")).lower():
+        paginas = processed.get("paginas") or processed.get("pages") or []
+        pasta = processed.get("pasta_saida", "")
+        for page_index, page in enumerate(paginas):
+            words = _page_words(page)
+            rot_prop = [w for w in words if any(x in _key(_word_text(w)) for x in ["proprietario", "roprietario", "propristario", "arrendatario"])]
+            rot_propriedade = [w for w in words if _key(_word_text(w)) == "propriedade"]
+            if not rot_prop and not rot_propriedade:
+                continue
+            caminho_img = _os_v12.path.join(pasta, f"pagina_{page_index + 1:03d}.png")
+            if not _os_v12.path.exists(caminho_img):
+                continue
+            img_p = _cv2_v12.imread(caminho_img)
+            if img_p is None:
+                continue
+
+            if rot_propriedade:
+                rot = max(rot_propriedade, key=_cy)
+                ax = int(_word_x(rot))
+                ay = int(_cy(rot))
+                y1 = max(0, ay - 68)
+                y2 = min(img_p.shape[0], ay - 6)
+                x1 = max(0, ax - 10)
+                x2 = min(img_p.shape[1], ax + 600)
+            else:
+                rot = max(rot_prop, key=_cy)
+                ax = int(_word_x(rot))
+                ay = int(_cy(rot))
+                y1 = max(0, ay - 8)
+                y2 = min(img_p.shape[0], ay + 55)
+                x1 = max(0, ax - 10)
+                x2 = min(img_p.shape[1], ax + 600)
+
+            cell_crop = img_p[y1:y2, x1:x2]
+            if cell_crop.size > 0:
+                txt_cell = _pytesseract_v12.image_to_string(cell_crop, lang="por+eng", config="--psm 6").strip()
+                linhas_c = [l.strip() for l in txt_cell.splitlines() if l.strip()]
+                cand_p = ""
+                for l in linhas_c:
+                    if ":" in l:
+                        after = l.split(":", 1)[1].strip()
+                        if len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", after)) >= 1:
+                            cand_p = after
+                            break
+                    elif not any(k in _key(l) for k in ["proprietario", "roprietario", "propristario", "arrendatario", "propriedade", "agrupamento"]):
+                        if len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", l)) >= 1:
+                            cand_p = l
+                            break
+                cand_p = re.split(r"\b(?:[ÁA]rea|Carreador|Status|\d+,\d+%)\b", cand_p, flags=re.I)[0].strip(" |:;,-")
+                cand_p = re.sub(r"^[^A-Za-zÀ-ÿ0-9]+", "", cand_p).strip()
+                if re.match(r"^CEM\b", cand_p, re.I) and "cana" in cand_p.lower():
+                    cand_p = re.sub(r"^CEM\b", "CFM", cand_p, flags=re.I)
+                if cand_p and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", cand_p)) >= 1:
+                    resultado["metadata"]["proprietario"] = cand_p
+                    resultado["proprietario"] = cand_p
+                    for b in resultado.get("blocos") or []:
+                        if not b.get("proprietario"):
+                            b["proprietario"] = cand_p
+                    break
+
+    if resultado.get("metadata", {}).get("propriedade"):
+        resultado["metadata"]["propriedade"] = limpar_nome_propriedade(resultado["metadata"]["propriedade"])
+        resultado["propriedade"] = resultado["metadata"]["propriedade"]
+        for b in resultado.get("blocos") or []:
+            if b.get("propriedade"):
+                b["propriedade"] = limpar_nome_propriedade(b["propriedade"])
+
+    if resultado.get("metadata", {}).get("proprietario"):
+        resultado["metadata"]["proprietario"] = limpar_nome_proprietario(resultado["metadata"]["proprietario"])
+        resultado["proprietario"] = resultado["metadata"]["proprietario"]
+        for b in resultado.get("blocos") or []:
+            if b.get("proprietario"):
+                b["proprietario"] = limpar_nome_proprietario(b["proprietario"])
 
     return resultado
 
