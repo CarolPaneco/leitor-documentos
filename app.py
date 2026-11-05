@@ -16,7 +16,7 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 from services.document_processor import get_processor
-from services.agricultural_extractor import extrair_dados, limpar_nome_propriedade, limpar_nome_proprietario
+from services.agricultural_extractor import extrair_dados, limpar_nome_propriedade, limpar_nome_proprietario, extrair_metadados_nome_arquivo, sanitizar_variedade
 from services.validator import validar_documento
 
 
@@ -91,9 +91,13 @@ def extrair_linhas_excel(documento):
         or {}
     )
 
+    nome_arquivo = documento.get("nome_arquivo", "")
+    fn_meta = extrair_metadados_nome_arquivo(nome_arquivo) if nome_arquivo else {}
+
     propriedade = limpar_nome_propriedade(str(
         metadata.get("propriedade")
         or documento.get("propriedade")
+        or fn_meta.get("propriedade")
         or ""
     ).strip())
 
@@ -102,6 +106,7 @@ def extrair_linhas_excel(documento):
         or metadata.get("proprietário")
         or documento.get("proprietario")
         or documento.get("proprietário")
+        or fn_meta.get("proprietario")
         or ""
     ).strip())
 
@@ -116,6 +121,7 @@ def extrair_linhas_excel(documento):
     bloco_doc = str(
         metadata.get("bloco")
         or documento.get("bloco")
+        or fn_meta.get("bloco")
         or ""
     ).strip()
 
@@ -192,11 +198,33 @@ def extrair_linhas_excel(documento):
                 continue
             vistos.add(chave)
 
+            row_propriedade = limpar_nome_propriedade(str(
+                talhao.get("propriedade")
+                or bloco_prop
+                or fn_meta.get("propriedade")
+                or ""
+            ).strip())
+
+            row_proprietario = limpar_nome_proprietario(str(
+                talhao.get("proprietario")
+                or talhao.get("proprietário")
+                or bloco_proprio
+                or fn_meta.get("proprietario")
+                or ""
+            ).strip())
+
+            var_final, row_pr, row_p = sanitizar_variedade(var_t, row_proprietario, row_propriedade)
+            if row_pr and not row_proprietario:
+                row_proprietario = row_pr
+            if row_p and not row_propriedade:
+                row_propriedade = row_p
+
             linhas.append({
                 "Bloco":
                     str(
                         talhao.get("bloco")
                         or codigo_bloco
+                        or fn_meta.get("bloco")
                         or ""
                     ).strip(),
 
@@ -204,7 +232,7 @@ def extrair_linhas_excel(documento):
                     t_num,
 
                 "Variedade":
-                    var_t,
+                    var_final,
 
                 "Área":
                     area_t,
@@ -213,19 +241,10 @@ def extrair_linhas_excel(documento):
                     plantio_t,
 
                 "Propriedade":
-                    limpar_nome_propriedade(str(
-                        talhao.get("propriedade")
-                        or bloco_prop
-                        or ""
-                    ).strip()),
+                    row_propriedade,
 
                 "Proprietário":
-                    limpar_nome_proprietario(str(
-                        talhao.get("proprietario")
-                        or talhao.get("proprietário")
-                        or bloco_proprio
-                        or ""
-                    ).strip()),
+                    row_proprietario,
 
                 "Município":
                     str(
@@ -435,6 +454,8 @@ def processar_arquivo_temporario(
                 documento_id
             )
         )
+        if resultado_ocr:
+            resultado_ocr["nome_arquivo"] = nome_original
 
 
         if not resultado_ocr.get(
@@ -457,6 +478,8 @@ def processar_arquivo_temporario(
         documento = extrair_dados(
             resultado_ocr
         )
+        if documento:
+            documento["nome_arquivo"] = nome_original
 
 
         # ----------------------------------------------------
@@ -466,6 +489,8 @@ def processar_arquivo_temporario(
         documento = validar_documento(
             documento
         )
+        if documento:
+            documento["nome_arquivo"] = nome_original
 
 
         # ----------------------------------------------------
@@ -1431,6 +1456,8 @@ def api_processar_e_gerar_excel():
 
         processor = get_processor()
         resultado_ocr = processor.processar(caminho_temp, documento_id)
+        if resultado_ocr:
+            resultado_ocr["nome_arquivo"] = nome_arquivo
 
         if not resultado_ocr.get("sucesso"):
             raise RuntimeError(
@@ -1438,7 +1465,11 @@ def api_processar_e_gerar_excel():
             )
 
         documento = extrair_dados(resultado_ocr)
+        if documento:
+            documento["nome_arquivo"] = nome_arquivo
         documento = validar_documento(documento)
+        if documento:
+            documento["nome_arquivo"] = nome_arquivo
         linhas = extrair_linhas_excel(documento)
 
         if not linhas:
