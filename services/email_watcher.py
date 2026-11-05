@@ -70,7 +70,7 @@ def print(*args, **kwargs):
         pass
 
 from services.document_processor import get_processor
-from services.agricultural_extractor import extrair_dados
+from services.agricultural_extractor import extrair_dados, extrair_linhas_excel, extrair_metadados_nome_arquivo, limpar_nome_propriedade, limpar_nome_proprietario
 from services.validator import validar_documento
 
 GMAIL_USER = os.environ.get("GMAIL_USER", "robo.agricola.leitor@gmail.com")
@@ -215,61 +215,11 @@ def _decodificar_cabecalho(texto):
 
 
 def extrair_linhas_para_excel(documento):
-    metadata = documento.get("metadata") or {}
-    bloco_doc = str(metadata.get("bloco") or documento.get("bloco") or "").strip()
-    propriedade = str(metadata.get("propriedade") or documento.get("propriedade") or "").strip()
-    proprietario = str(metadata.get("proprietario") or metadata.get("proprietário") or documento.get("proprietario") or "").strip()
-    municipio = str(metadata.get("municipio") or metadata.get("município") or documento.get("municipio") or "").strip()
-
-    linhas = []
-    blocos = documento.get("blocos") or []
-    if not blocos:
-        blocos = [{"bloco": bloco_doc, "talhoes": documento.get("talhoes") or []}]
-
-    vistos = set()
-    for b in blocos:
-        bloco_codigo = str(b.get("bloco") or bloco_doc).strip()
-        bloco_prop = str(b.get("propriedade") or propriedade).strip()
-        bloco_proprio = str(b.get("proprietario") or b.get("proprietário") or proprietario).strip()
-        bloco_mun = str(b.get("municipio") or b.get("município") or municipio).strip()
-
-        for talhao in (b.get("talhoes") or []):
-            if not isinstance(talhao, dict):
-                continue
-            t_num = str(talhao.get("talhao") or talhao.get("talhão") or talhao.get("numero") or "").strip()
-            # Descarta linhas sem número de talhão
-            if not t_num or not any(c.isdigit() for c in t_num):
-                continue
-
-            var_t = str(talhao.get("variedade") or "").strip()
-            # Descarta vazamento de blocos de metadados, status ou rodapés
-            if any(k in var_t.lower() for k in ["bloco", "status", "mapa de", "área total", "resumo de área"]):
-                continue
-
-            area_t = str(talhao.get("area") or talhao.get("área") or "").strip()
-            plantio_t = str(talhao.get("plantio") or talhao.get("data_plantio") or "").strip()
-            import re
-            m_dt = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", plantio_t)
-            if m_dt:
-                plantio_t = f"{int(m_dt.group(1)):02d}/{int(m_dt.group(2)):02d}/{m_dt.group(3)}"
-
-            # Evita duplicatas puras causadas por repetição de OCR, mantendo talhões divididos legítimos
-            chave = (bloco_codigo, t_num, var_t, area_t, plantio_t)
-            if chave in vistos:
-                continue
-            vistos.add(chave)
-
-            linhas.append({
-                "Bloco": str(talhao.get("bloco") or bloco_codigo or "").strip(),
-                "Talhão": t_num,
-                "Variedade": var_t,
-                "Área": area_t,
-                "Plantio": plantio_t,
-                "Propriedade": str(talhao.get("propriedade") or bloco_prop or "").strip(),
-                "Proprietário": str(talhao.get("proprietario") or talhao.get("proprietário") or bloco_proprio or "").strip(),
-                "Município": str(talhao.get("municipio") or talhao.get("município") or bloco_mun or "").strip(),
-            })
-    return linhas
+    """
+    Delega diretamente para a função canônica extrair_linhas_excel
+    garantindo que todos os filtros, limpezas e desduplicações sejam aplicados.
+    """
+    return extrair_linhas_excel(documento)
 
 
 def gerar_arquivo_excel(linhas):
@@ -772,10 +722,15 @@ def processar_lotes_prontos():
 
                     if resultado_ocr.get("sucesso"):
                         print(f"[EXTRACAO] Analisando tabelas e talhoes ({nome_arq})...")
+                        resultado_ocr["nome_arquivo"] = nome_arq
                         doc = extrair_dados(resultado_ocr)
+                        if doc:
+                            doc["nome_arquivo"] = nome_arq
                         print(f"[EXTRACAO] Validando campos e montando linhas...")
                         doc = validar_documento(doc)
-                        linhas_doc = extrair_linhas_para_excel(doc)
+                        if doc:
+                            doc["nome_arquivo"] = nome_arq
+                        linhas_doc = extrair_linhas_excel(doc)
                         print(f"[EXTRACAO] {len(linhas_doc)} talhao(oes) identificado(s) em {nome_arq}.")
                         todas_linhas.extend(linhas_doc)
 

@@ -7561,6 +7561,9 @@ def sanitizar_variedade(var, proprietario="", propriedade=""):
     if not v:
         return "", proprietario, propriedade
 
+    v = re.sub(r"\bR855156\b", "RB855156", v)
+    v = re.sub(r"\bR8(\d{5,6})\b", lambda m: ("RB" + m.group(1)) if len(m.group(1)) == 6 else ("RB8" + m.group(1)), v)
+
     if RE_VARIEDADE_CANA.search(v):
         return v, proprietario, propriedade
 
@@ -7593,7 +7596,6 @@ def sanitizar_variedade(var, proprietario="", propriedade=""):
             return "", proprietario, propriedade
 
     return v, proprietario, propriedade
-
 
 def _v16_recuperar_metadados(words):
     """
@@ -9917,8 +9919,8 @@ def limpar_nome_propriedade(valor):
         r"(?:"
         r"[ÁA]REA\s*TOTAL|[ÁA]REATOTAL|[ÁA]REA\s+DE\s+CARREADOR|[ÁA]REA\s+DE\s+CANA|[ÁA]REA\s+SEM\s+PLANTAR"
         r"|[ÁA]REA|AREA|TOTAL|CARREADOR|STATUS|LOCALIZA[CÇ][AÃ]O|LEVANTAMENTO|DECLIV(?:\.|IDADE)?"
-        r"|ESCALA|ETAPA|DESENHO|TIPO|DIST[AÂ]NCIA|UNIDADE\s+GESTORA|LATITUDE|LONGITUDE"
-        r"|MATR[IÍ]CULA|CCIR|SOLO|AMBIENTE"
+        r"|ESCALA|ETAPA|DESENHO|TIPO|DIST[AÁ]NCIA|UNIDADE\s+GESTORA|LATITUDE|LONGITUDE"
+        r"|MATR[IÍ]CULA|CCIR|SOLO|AMBIENTE|VAR\.\s*VEG|V\.\s*VEG|VEGETA[CÇ][AÃ]O"
         r")\b.*",
         re.I
     )
@@ -9927,7 +9929,13 @@ def limpar_nome_propriedade(valor):
     # 2. Corta números de área vazados (ex: 88,90 ha ou 36,74 alq)
     v = re.split(r"\s+\d{1,4}[.,]\d{1,2}\s*(?:ha|alq|al|\b)?", v, maxsplit=1, flags=re.I)[0].strip(" |:;,-")
     
-    # 3. Limpeza iterativa de caudas com ruído de pontuação/OCR ou abreviações órfãs
+    # 3. Limpeza de ruídos específicos
+    v = re.sub(r"\s+(?:We\s+veg|Var\s+veg|V\s+veg|veg)\b.*$", "", v, flags=re.I).strip(" |:;,-")
+    v = re.sub(r"\s+SKA\b.*$", "", v, flags=re.I).strip(" |:;,-")
+    v = re.sub(r"\s+(?:has|ha|alq)\s+.*$", "", v, flags=re.I).strip(" |:;,-")
+    v = re.sub(r"\bVot[oó]ria\b", "Vitória", v, flags=re.I)
+
+    # 4. Limpeza iterativa de caudas com ruído de pontuação/OCR ou abreviações órfãs
     while True:
         v_ant = v
         # Corta cauda iniciada por símbolos ou caracteres não-alfanuméricos (ex: '» =]', '‘(ee', '«(al')
@@ -9942,7 +9950,6 @@ def limpar_nome_propriedade(valor):
             break
 
     return v
-
 
 def limpar_nome_proprietario(valor):
     """
@@ -9990,6 +9997,7 @@ def _v19_normalizar_municipio_valor(valor):
     valor = " ".join(str(valor or "").split()).strip(" |:-")
     if not valor:
         return ""
+    valor = re.sub(r"\bPlaestina\b", "Palestina", valor, flags=re.I)
 
     m = re.search(
         r"^(.+?)\s*[-–]\s*([A-Za-z]{2})$",
@@ -10006,6 +10014,7 @@ def _v19_normalizar_municipio_valor(valor):
         return valor
 
     cidade = " ".join(m.group(1).split())
+    cidade = re.sub(r"\bPlaestina\b", "Palestina", cidade, flags=re.I)
     uf = m.group(2).upper()
     partes = cidade.split()
 
@@ -10328,3 +10337,249 @@ def extrair_dados(processed):
                 b["bloco"] = resultado["bloco"]
 
     return resultado
+
+
+def extrair_linhas_excel(documento):
+    """
+    Converte o resultado de UM documento para as linhas finais do Excel.
+    
+    Campos:
+    1. Bloco
+    2. Talhão
+    3. Variedade
+    4. Área
+    5. Plantio
+    6. Propriedade
+    7. Proprietário
+    8. Município
+    """
+    metadata = documento.get("metadata") or {}
+    
+    nome_arquivo = (
+        documento.get("nome_arquivo")
+        or documento.get("arquivo")
+        or documento.get("pasta_saida")
+        or ""
+    )
+    fn_meta = extrair_metadados_nome_arquivo(os.path.basename(nome_arquivo)) if nome_arquivo else {}
+
+    propriedade = limpar_nome_propriedade(str(
+        metadata.get("propriedade")
+        or documento.get("propriedade")
+        or fn_meta.get("propriedade")
+        or ""
+    ).strip())
+
+    proprietario = limpar_nome_proprietario(str(
+        metadata.get("proprietario")
+        or metadata.get("proprietário")
+        or documento.get("proprietario")
+        or documento.get("proprietário")
+        or fn_meta.get("proprietario")
+        or ""
+    ).strip())
+
+    municipio = str(
+        metadata.get("municipio")
+        or metadata.get("município")
+        or documento.get("municipio")
+        or documento.get("município")
+        or fn_meta.get("municipio")
+        or ""
+    ).strip()
+    municipio = _v19_normalizar_municipio_valor(municipio)
+
+    bloco_doc = str(
+        metadata.get("bloco")
+        or documento.get("bloco")
+        or fn_meta.get("bloco")
+        or ""
+    ).strip()
+
+    blocos = documento.get("blocos") or []
+    if not blocos and (documento.get("talhoes") or []):
+        blocos = [{
+            "bloco": bloco_doc,
+            "talhoes": documento.get("talhoes") or [],
+        }]
+
+    linhas = []
+
+    for bloco in blocos:
+        codigo_bloco = str(
+            bloco.get("bloco")
+            or bloco.get("codigo")
+            or bloco_doc
+            or fn_meta.get("bloco")
+            or ""
+        ).strip()
+
+        bloco_prop = str(
+            bloco.get("propriedade")
+            or propriedade
+            or fn_meta.get("propriedade")
+        ).strip()
+
+        bloco_proprio = str(
+            bloco.get("proprietario")
+            or bloco.get("proprietário")
+            or proprietario
+            or fn_meta.get("proprietario")
+        ).strip()
+
+        bloco_mun = str(
+            bloco.get("municipio")
+            or bloco.get("município")
+            or municipio
+            or fn_meta.get("municipio")
+        ).strip()
+
+        vistos = set()
+        for talhao in (bloco.get("talhoes") or []):
+            if not isinstance(talhao, dict):
+                continue
+
+            t_num = str(
+                talhao.get("talhao")
+                or talhao.get("talhão")
+                or talhao.get("numero")
+                or ""
+            ).strip()
+            if not t_num or not any(c.isdigit() for c in t_num):
+                continue
+
+            var_t = str(talhao.get("variedade") or "").strip()
+            var_low = var_t.lower()
+            t_low = t_num.lower()
+
+            # Descarta linhas de total, subtotais e resumos
+            if (
+                var_low in {"total", "subtotal", "sub-total", "resumo", "soma", "área total", "areatotal"}
+                or "total" in var_low
+                or "subtotal" in var_low
+                or "resumo" in var_low
+                or t_low in {"total", "subtotal", "resumo"}
+            ):
+                continue
+
+            # Descarta linhas de topografia, metadados ou técnicos (ex: EVERTON / VANT, EZEQUIAS / VANT)
+            if any(k in var_low or k in t_low for k in [
+                "bloco", "status", "mapa de", "levantamento", "desenho", "escala", "decliv",
+                "topografia", "gestora", "unidade gestora", "distancia", "distância", "ccir",
+                "matricula", "matrícula", "solo", "ambiente", "amanda", "stringhini",
+                "sirgas", "vant", "everton", "ezequias", "topografo", "responsavel"
+            ]):
+                continue
+
+            area_t = str(talhao.get("area") or talhao.get("área") or "").strip()
+            plantio_t = str(talhao.get("plantio") or talhao.get("data_plantio") or "").strip()
+            m_dt = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", plantio_t)
+            if m_dt:
+                plantio_t = f"{int(m_dt.group(1)):02d}/{int(m_dt.group(2)):02d}/{m_dt.group(3)}"
+
+            chave = (codigo_bloco, t_num, var_t, area_t, plantio_t)
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+
+            row_propriedade = limpar_nome_propriedade(str(
+                talhao.get("propriedade")
+                or bloco_prop
+                or fn_meta.get("propriedade")
+                or ""
+            ).strip())
+
+            row_proprietario = limpar_nome_proprietario(str(
+                talhao.get("proprietario")
+                or talhao.get("proprietário")
+                or bloco_proprio
+                or fn_meta.get("proprietario")
+                or ""
+            ).strip())
+
+            row_mun = str(
+                talhao.get("municipio")
+                or talhao.get("município")
+                or bloco_mun
+                or fn_meta.get("municipio")
+                or ""
+            ).strip()
+            row_mun = _v19_normalizar_municipio_valor(row_mun)
+
+            # Corrige vazamento de proprietário para variedade
+            var_final, row_pr, row_p = sanitizar_variedade(var_t, row_proprietario, row_propriedade)
+            if row_pr and not row_proprietario:
+                row_proprietario = row_pr
+            if row_p and not row_propriedade:
+                row_propriedade = row_p
+
+            # Corrige divisão errônea onde 'Santa' ficou na propriedade em vez de no proprietário
+            m_santa = re.search(r"^(.*?)\s+Santa$", row_propriedade, re.I)
+            if m_santa and re.match(r"^L[uú]cia\b", row_proprietario, re.I):
+                row_propriedade = m_santa.group(1).strip()
+                row_proprietario = f"Santa {row_proprietario}".strip()
+
+            linhas.append({
+                "Bloco": str(
+                    talhao.get("bloco")
+                    or codigo_bloco
+                    or fn_meta.get("bloco")
+                    or ""
+                ).strip(),
+                "Talhão": t_num,
+                "Variedade": var_final,
+                "Área": area_t,
+                "Plantio": plantio_t,
+                "Propriedade": row_propriedade,
+                "Proprietário": row_proprietario,
+                "Município": row_mun,
+            })
+
+    # Deduplica SEM PLANTAR quando o mesmo talhão possui variedade cultivada
+    linhas_por_talhao = {}
+    for l in linhas:
+        chave_t = (
+            str(l.get("Bloco", "")).strip(),
+            str(l.get("Talhão", "") or l.get("Talhao", "")).strip()
+        )
+        linhas_por_talhao.setdefault(chave_t, []).append(l)
+
+    linhas_finais = []
+    for chave_t, grupo in linhas_por_talhao.items():
+        if len(grupo) > 1:
+            reais = [r for r in grupo if r.get("Variedade", "").strip().upper() not in {"SEM PLANTAR", "SEM CULTURA", ""}]
+            sem_pl = [r for r in grupo if r.get("Variedade", "").strip().upper() in {"SEM PLANTAR", "SEM CULTURA"}]
+            if reais and sem_pl:
+                linhas_finais.extend(reais)
+                continue
+        linhas_finais.extend(grupo)
+
+    # Deduplica talhão 41 fantasma gerado por OCR de linha de grade (| 1 -> 41)
+    tem_1 = any(str(l.get("Talhão") or l.get("Talhao") or "").strip() == "1" for l in linhas_finais)
+    tem_41 = any(str(l.get("Talhão") or l.get("Talhao") or "").strip() == "41" for l in linhas_finais)
+    if tem_1 and tem_41:
+        talhoes_nums = []
+        for l in linhas_finais:
+            t = str(l.get("Talhão") or l.get("Talhao") or "").strip()
+            if t.isdigit():
+                talhoes_nums.append(int(t))
+        outros_altos = [n for n in talhoes_nums if 30 <= n <= 50 and n != 41]
+        if not outros_altos:
+            t1_rows = [l for l in linhas_finais if str(l.get("Talhão") or l.get("Talhao") or "").strip() == "1"]
+            linhas_filtradas = []
+            for l in linhas_finais:
+                t = str(l.get("Talhão") or l.get("Talhao") or "").strip()
+                if t == "41":
+                    area_41 = str(l.get("Área") or l.get("Area") or "").strip()
+                    var_41 = str(l.get("Variedade") or "").strip().upper()
+                    match_1 = any(
+                        str(r.get("Área") or r.get("Area") or "").strip() == area_41
+                        or (var_41 and str(r.get("Variedade") or "").strip().upper() == var_41)
+                        for r in t1_rows
+                    )
+                    if match_1:
+                        continue
+                linhas_filtradas.append(l)
+            linhas_finais = linhas_filtradas
+
+    return linhas_finais
