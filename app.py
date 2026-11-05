@@ -173,7 +173,11 @@ def extrair_linhas_excel(documento):
                 continue
 
             var_t = str(talhao.get("variedade") or "").strip()
-            if any(k in var_t.lower() for k in ["bloco", "status", "mapa de", "área total", "resumo de área", "levantamento", "desenho", "escala", "vant", "everton"]):
+            var_low = var_t.lower()
+            if var_low in {"total", "subtotal", "sub-total", "resumo", "soma", "área total", "areatotal"} or "total" in var_low or "subtotal" in var_low or "resumo" in var_low or t_num.lower() in {"total", "subtotal", "resumo"}:
+                continue
+
+            if any(k in var_low for k in ["bloco", "status", "mapa de", "levantamento", "desenho", "escala", "decliv", "topografia", "gestora", "unidade gestora", "distancia", "distância", "ccir", "matricula", "matrícula", "solo", "ambiente", "amanda", "stringhini", "sirgas", "vant", "everton", "ezequias"]):
                 continue
 
             area_t = str(talhao.get("area") or talhao.get("área") or "").strip()
@@ -232,7 +236,23 @@ def extrair_linhas_excel(documento):
                     ).strip(),
             })
 
-    return linhas
+    # Deduplica SEM PLANTAR quando o mesmo talhão possui variedade cultivada
+    linhas_por_talhao = {}
+    for l in linhas:
+        chave_t = (l.get("Bloco", ""), l.get("Talhão", ""))
+        linhas_por_talhao.setdefault(chave_t, []).append(l)
+
+    linhas_finais = []
+    for chave_t, grupo in linhas_por_talhao.items():
+        if len(grupo) > 1:
+            reais = [r for r in grupo if r.get("Variedade", "").strip().upper() != "SEM PLANTAR"]
+            sem_pl = [r for r in grupo if r.get("Variedade", "").strip().upper() == "SEM PLANTAR"]
+            if reais and sem_pl:
+                linhas_finais.extend(reais)
+                continue
+        linhas_finais.extend(grupo)
+
+    return linhas_finais
 
 
 def criar_excel(linhas):

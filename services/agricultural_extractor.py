@@ -4049,6 +4049,13 @@ def _v10_extrair_tabelas(caminho):
             if not variedade or not area:
                 continue
 
+            var_lower = variedade.strip().lower()
+            if var_lower in {"total", "subtotal", "sub-total", "resumo", "soma", "área total", "areatotal"} or "total" in var_lower or "subtotal" in var_lower or "resumo" in var_lower or str(talhao).strip().lower() in {"total", "subtotal", "resumo"}:
+                continue
+
+            if any(ign in var_lower for ign in ["vant", "everton", "ezequias", "levantamento", "desenho", "escala", "decliv", "topografia", "gestora", "unidade gestora", "distancia", "distância", "ccir", "matricula", "matrícula", "solo", "ambiente", "amanda", "stringhini", "sirgas"]):
+                continue
+
             registros.append({
                 "talhao": talhao,
                 "variedade": variedade,
@@ -5147,6 +5154,13 @@ def _v11_extrair_tabelas(caminho):
                 "LOCALIZACAO",
                 "SAFRA",
             }:
+                continue
+
+            var_lower = variedade.strip().lower()
+            if var_lower in {"total", "subtotal", "sub-total", "resumo", "soma", "área total", "areatotal"} or "total" in var_lower or "subtotal" in var_lower or "resumo" in var_lower or str(talhao).strip().lower() in {"total", "subtotal", "resumo"}:
+                continue
+
+            if any(ign in var_lower for ign in ["vant", "everton", "ezequias", "levantamento", "desenho", "escala", "decliv", "topografia", "gestora", "unidade gestora", "distancia", "distância", "ccir", "matricula", "matrícula", "solo", "ambiente", "amanda", "stringhini", "sirgas"]):
                 continue
 
             registros.append({
@@ -7407,6 +7421,13 @@ def _v16_ler_tabela_topo(caminho):
             if not talhao.isdigit():
                 continue
 
+            var_lower = str(variedade or "").strip().lower()
+            if var_lower in {"total", "subtotal", "sub-total", "resumo", "soma", "área total", "areatotal"} or "total" in var_lower or "subtotal" in var_lower or "resumo" in var_lower:
+                continue
+
+            if any(ign in var_lower for ign in ["vant", "everton", "ezequias", "levantamento", "desenho", "escala", "decliv", "topografia", "gestora", "unidade gestora", "distancia", "distância", "ccir", "matricula", "matrícula", "solo", "ambiente", "amanda", "stringhini", "sirgas"]):
+                continue
+
             resultados.append({
                 "talhao": talhao,
                 "variedade": variedade,
@@ -7705,34 +7726,52 @@ def _v16_recuperar_metadados(words):
                 continue
             wx = _word_x(w)
             wy = _cy(w)
-            min_y = ay + 5 if rotulo_prop else ay - 10
-            if min_y < wy <= max_y and ax - 20 <= wx <= ax + 580 and wx < 920:
+            max_x = min(ax + 750, 950)
+            eh_linha_abaixo = (ay + 5 < wy <= max_y and ax - 20 <= wx <= max_x)
+            eh_inline = (abs(wy - ay) <= 18 and ax + 35 <= wx <= max_x)
+            if (eh_linha_abaixo or eh_inline):
                 if len(t) > 1 or t in {"e"}:
                     cands.append(w)
 
-        cands_sort = sorted(cands, key=lambda w: (_word_x(w), -float(w.get("confianca", 0) or 0)))
-        desdup_p = []
-        for w in cands_sort:
-            t = normalizar(_word_text(w)).strip(" |:;,-")
-            if not t:
-                continue
-            if not desdup_p:
-                desdup_p.append(w)
-            else:
-                prev = desdup_p[-1]
-                prev_t = normalizar(_word_text(prev)).strip(" |:;,-")
-                prev_x2 = _word_x2_loc(prev)
-                if _word_x(w) < prev_x2 - 10 or t.lower() in prev_t.lower() or prev_t.lower().endswith(t.lower()):
-                    if float(w.get("confianca", 0) or 0) > float(prev.get("confianca", 0) or 0) or len(t) > len(prev_t):
-                        desdup_p[-1] = w
-                elif abs(_word_x(w) - _word_x(prev)) <= 25:
-                    if float(w.get("confianca", 0) or 0) > float(prev.get("confianca", 0) or 0):
-                        desdup_p[-1] = w
+        lines_prop = []
+        for w in sorted(cands, key=_cy):
+            placed = False
+            for l in lines_prop:
+                if abs(_cy(w) - sum(_cy(x) for x in l) / len(l)) <= 18:
+                    l.append(w)
+                    placed = True
+                    break
+            if not placed:
+                lines_prop.append([w])
+
+        lines_prop.sort(key=lambda l: sum(_cy(x) for x in l) / len(l))
+
+        ordered_cands_prop = []
+        for l in lines_prop:
+            l.sort(key=lambda w: (_word_x(w), -float(w.get("confianca", 0) or 0)))
+            desdup_l = []
+            for w in l:
+                t = normalizar(_word_text(w)).strip(" |:;,-")
+                if not t:
+                    continue
+                if not desdup_l:
+                    desdup_l.append(w)
                 else:
-                    desdup_p.append(w)
+                    prev = desdup_l[-1]
+                    prev_t = normalizar(_word_text(prev)).strip(" |:;,-")
+                    prev_x2 = _word_x2_loc(prev)
+                    if _word_x(w) < prev_x2 - 10 or t.lower() in prev_t.lower() or prev_t.lower().endswith(t.lower()):
+                        if float(w.get("confianca", 0) or 0) > float(prev.get("confianca", 0) or 0) or len(t) > len(prev_t):
+                            desdup_l[-1] = w
+                    elif abs(_word_x(w) - _word_x(prev)) <= 15:
+                        if float(w.get("confianca", 0) or 0) > float(prev.get("confianca", 0) or 0):
+                            desdup_l[-1] = w
+                    else:
+                        desdup_l.append(w)
+            ordered_cands_prop.extend(desdup_l)
 
         limpas_prop = []
-        for w in desdup_p:
+        for w in ordered_cands_prop:
             p = normalizar(_word_text(w)).strip(" |:;,-")
             if not limpas_prop or chave(limpas_prop[-1]) != chave(p):
                 limpas_prop.append(p)
@@ -8370,6 +8409,13 @@ def _v18_extrair_tabelas_grade(caminho):
                 if not var_norm or not area_norm or any(u in var_norm.lower() for u in ["alq", " ha"]):
                     continue
 
+                v_low = var_norm.strip().lower()
+                if v_low in {"total", "subtotal", "sub-total", "resumo", "soma", "área total", "areatotal"} or "total" in v_low or "subtotal" in v_low or "resumo" in v_low or str(talhao_num).strip().lower() in {"total", "subtotal", "resumo"}:
+                    continue
+
+                if any(ign in v_low for ign in ["vant", "everton", "ezequias", "levantamento", "desenho", "escala", "decliv", "topografia", "gestora", "unidade gestora", "distancia", "distância", "ccir", "matricula", "matrícula", "solo", "ambiente", "amanda", "stringhini", "sirgas"]):
+                    continue
+
                 registros_sub.append({
                     "talhao": talhao_num,
                     "variedade": var_norm,
@@ -8663,12 +8709,17 @@ def _v17_tabela_por_texto(processed):
                 ):
                     continue
 
+                var_t_low = variedade.strip().lower()
+                if var_t_low in {"total", "subtotal", "sub-total", "resumo", "soma", "área total", "areatotal"} or "total" in var_t_low or "subtotal" in var_t_low or "resumo" in var_t_low or talhao.lower() in {"total", "subtotal", "resumo"}:
+                    continue
+
                 if any(
-                    ign in variedade.lower()
+                    ign in var_t_low
                     for ign in [
-                        "vant", "everton", "levantamento", "desenho", "escala",
-                        "decliv", "gestora", "distancia", "distância", "unidade",
-                        "matricula", "matrícula", "ccir", "ambiente", "solo"
+                        "vant", "everton", "ezequias", "levantamento", "desenho", "escala",
+                        "decliv", "topografia", "gestora", "unidade gestora", "distancia",
+                        "distância", "unidade", "matricula", "matrícula", "ccir", "ambiente",
+                        "solo", "amanda", "stringhini", "sirgas"
                     ]
                 ):
                     continue
@@ -9137,7 +9188,15 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
         if not talhao_novo:
             continue
 
-        var_novo_key = _key(str(novo.get("variedade", "")))
+        var_novo_raw = str(novo.get("variedade", "")).strip()
+        var_novo_low = var_novo_raw.lower()
+        if var_novo_low in {"total", "subtotal", "sub-total", "resumo", "soma", "área total", "areatotal"} or "total" in var_novo_low or "subtotal" in var_novo_low or "resumo" in var_novo_low or talhao_novo.lower() in {"total", "subtotal", "resumo"}:
+            continue
+
+        if any(ign in var_novo_low for ign in ["vant", "everton", "ezequias", "levantamento", "desenho", "escala", "decliv", "topografia", "gestora", "unidade gestora", "distancia", "distância", "ccir", "matricula", "matrícula", "solo", "ambiente", "amanda", "stringhini", "sirgas"]):
+            continue
+
+        var_novo_key = _key(var_novo_raw)
 
         candidatos_mesmo_talhao = [
             r for r in base
@@ -9217,6 +9276,23 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
             ):
                 alvo[campo] = novo[campo]
 
+    # Deduplicação segura de SEM PLANTAR quando o talhão já possui variedade cultivada
+    por_talhao = {}
+    for r in base:
+        t_id = str(r.get("talhao", "")).strip()
+        por_talhao.setdefault(t_id, []).append(r)
+
+    base_limpa = []
+    for t_id, lista in por_talhao.items():
+        if len(lista) > 1:
+            reais = [r for r in lista if str(r.get("variedade", "")).strip().upper() != "SEM PLANTAR"]
+            sem_pl = [r for r in lista if str(r.get("variedade", "")).strip().upper() == "SEM PLANTAR"]
+            if reais and sem_pl:
+                base_limpa.extend(reais)
+                continue
+        base_limpa.extend(lista)
+    base = base_limpa
+
     # Ordenação estável por página/talhão.
     def chave_ord(r):
         try:
@@ -9263,7 +9339,7 @@ def _v17_metadados_texto_limpo(processed):
     ]
 
     # Proprietário/Arrendatário:
-    # procura uma linha posterior limpa que contenha "/" e nomes.
+    # procura na mesma linha ou linha posterior
     for i, linha in enumerate(linhas):
         k = _key(linha)
 
@@ -9273,17 +9349,22 @@ def _v17_metadados_texto_limpo(processed):
         ):
             continue
 
+        # Verifica primeiro se o proprietário está na própria linha (inline)
+        m_inline = re.search(r"(?:propriet[aá]rio|arrendat[aá]rio)\s*:?\s*([A-Za-zÀ-ÿ].*)", linha, re.I)
+        if m_inline:
+            cand_inline = re.split(r"\b(?:[AÁ]rea|Carreador|Status|Unidade|\d+,\d+%)\b", m_inline.group(1), flags=re.I)[0].strip(" |:-")
+            palavras_inl = re.findall(r"[A-Za-zÀ-ÿ]{2,}", cand_inline)
+            if len(palavras_inl) >= 2 and not any(ign in cand_inline.lower() for ign in ["matricula", "ccir", "distancia", "escala"]):
+                resultado["proprietario"] = " ".join(cand_inline.split())
+                break
+
         for prox in linhas[i + 1:i + 4]:
             prox_limpo = re.split(r"\b(?:[AÁ]rea\s+de\s+Carreador|[AÁ]rea\s+Total|Status:?|Unidade\s+Gestora|\d+,\d+%)\b", prox, flags=re.I)[0].strip(" |:-")
-            if (
-                "/" in prox_limpo
-                and len(
-                    re.findall(
-                        r"[A-Za-zÀ-ÿ]{2,}",
-                        prox_limpo,
-                    )
-                ) >= 4
-            ):
+            palavras = re.findall(r"[A-Za-zÀ-ÿ]{2,}", prox_limpo)
+            eh_multiplo = ("/" in prox_limpo and len(palavras) >= 4)
+            tem_empresa = bool(re.search(r"\b(?:LTDA|S\.?A\.?|ME|EPP|EIRELI|INCORP|AGRO)\b", prox_limpo, re.I))
+            eh_nome_valido = (len(palavras) >= 2 and not any(ign in prox_limpo.lower() for ign in ["matricula", "ccir", "distancia", "escala", "bloco", "fazenda", "sitio", "propriedade"]))
+            if eh_multiplo or (tem_empresa and eh_nome_valido) or (len(palavras) >= 3 and eh_nome_valido):
                 candidato = prox_limpo.strip(" |:-")
                 candidato = re.sub(
                     r"\s+[A-Z]{2}\s*:?$",
@@ -9738,8 +9819,12 @@ def limpar_nome_proprietario(valor):
     while True:
         v_ant = v
         v = re.sub(r"[\s|/]+[^A-Za-z0-9À-ÿ\s/]+.*$", "", v).strip(" |:;,-")
-        v = re.sub(r"\s+[A-Za-z]{1,2}(?:\s*\.\s*[A-Za-z]{1,2})*\s*$", "", v).strip(" |:;,-")
-        v = re.sub(r"[^A-Za-z0-9À-ÿ)]+$", "", v).strip(" |:;,-")
+        m_sigla = re.search(r"\s+([A-Za-z]{1,2}(?:\s*\.\s*[A-Za-z]{1,2})*)\s*$", v)
+        if m_sigla:
+            sigla = m_sigla.group(1).replace(".", "").replace(" ", "").lower()
+            if sigla not in {"me", "sa", "epp", "cia", "ltda"}:
+                v = v[:m_sigla.start()].strip(" |:;,-")
+        v = re.sub(r"[^A-Za-z0-9À-ÿ).]+$", "", v).strip(" |:;,-")
         if v == v_ant:
             break
         
