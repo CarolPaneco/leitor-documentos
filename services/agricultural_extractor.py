@@ -7701,7 +7701,7 @@ def _v16_recuperar_metadados(words):
                 "roprietario",
                 "propristario",
                 "proprieta",
-            }:
+            } or re.match(r"^[xX\)\(\s]{2,}$", t):
                 continue
             wx = _word_x(w)
             wy = _cy(w)
@@ -7738,6 +7738,8 @@ def _v16_recuperar_metadados(words):
                 limpas_prop.append(p)
 
         valor = limpar_valor(" ".join(limpas_prop))
+        valor = re.sub(r"^[•·\-\)\(\s]+", "", valor).strip()
+        valor = re.sub(r"\b[xX]{2,}\b|\b[xX\)\(]{3,}\b", "", valor).strip(" |:;,-")
         valor = re.split(r"\b(?:[ÁA]rea|Carreador|Status|\d+,\d+%)\b", valor, flags=re.I)[0].strip(" |:;,-")
         if re.match(r"^CEM\b", valor, re.I) and "cana" in valor.lower():
             valor = re.sub(r"^CEM\b", "CFM", valor, flags=re.I)
@@ -7775,8 +7777,20 @@ def _v16_recuperar_metadados(words):
             if ay - 10 <= wy <= max_y and ax - 20 <= wx <= ax + 580 and wx < 920:
                 cands.append(w)
 
-        cands = sorted(cands, key=lambda w: (_cy(w), _word_x(w)))
-        raw_text = " ".join(_word_text(w) for w in cands)
+        lines_p = []
+        for w in sorted(cands, key=_cy):
+            placed = False
+            for l in lines_p:
+                if abs(_cy(w) - sum(_cy(x) for x in l) / len(l)) <= 18:
+                    l.append(w)
+                    placed = True
+                    break
+            if not placed:
+                lines_p.append([w])
+        for l in lines_p:
+            l.sort(key=_word_x)
+        ordered_cands = [w for l in sorted(lines_p, key=lambda l: sum(_cy(x) for x in l) / len(l)) for w in l]
+        raw_text = " ".join(_word_text(w) for w in ordered_cands)
         m_faz = re.search(r"((?:Fazenda|S[ií]tio)\b[^0-9\n\r]+)", raw_text, re.I)
         if m_faz:
             valor = m_faz.group(1).strip()
@@ -7835,6 +7849,36 @@ def _v16_recuperar_metadados(words):
                     valor = m_prop.group(1).strip()
                 valor = re.split(r"\s+\d{1,3}[.,]\d{1,2}\b", valor, maxsplit=1)[0].strip()
                 resultado["propriedade"] = valor
+
+    # Fallback para propriedade se rótulo não foi detectado no OCR
+    if not resultado["propriedade"]:
+        meta_words = [
+            w for w in ordenadas
+            if 2400 <= _cy(w) <= 2850
+            and 200 <= _word_x(w) <= 900
+            and chave(_word_text(w)) not in {
+                "propriedade", "municipio", "bloco", "un gestora",
+                "area", "status", "vertente", "usina", "agrupamento",
+                "carreador", "total"
+            }
+        ]
+        sitio_words = [
+            w for w in meta_words
+            if re.search(r"\b(?:Fazenda|S[ií]tio)\b", _word_text(w), re.I)
+        ]
+        if sitio_words:
+            sy = _cy(sitio_words[0])
+            line_words = sorted(
+                [w for w in meta_words if abs(_cy(w) - sy) <= 20],
+                key=_word_x
+            )
+            txt = " ".join(_word_text(w) for w in line_words)
+            m = re.search(r"((?:Fazenda|S[ií]tio)\b[^0-9\n\r]+)", txt, re.I)
+            if m:
+                valor = re.split(r"\s*[|]\s*|\s+\b(?:AREA|ÁREA|TOTAL)\b", m.group(1), flags=re.I)[0].strip()
+                valor = re.split(r"\s+\d{1,3}[.,]\d{1,2}\b", valor, maxsplit=1)[0].strip(" |:;,-")
+                resultado["propriedade"] = valor
+
     # ------------------------------------------------------------
     # MUNICÍPIO
     # ------------------------------------------------------------
@@ -8550,10 +8594,11 @@ def _v17_tabela_por_texto(processed):
         if inicio < 0:
             continue
 
-        fim = texto.lower().find(
-            "bloco:",
-            inicio
-        )
+        fim = -1
+        for delim in ["bloco:", "bloco ", "\nbloco", "tereos", "proprietário", "proprietario", "propriedade:", "propriedade ", "área de cana", "area de cana", "resumo de", "resumo"]:
+            pos = texto.lower().find(delim, inicio)
+            if pos > 0 and (fim < 0 or pos < fim):
+                fim = pos
 
         if fim < 0:
             fim = len(texto)
@@ -8615,6 +8660,16 @@ def _v17_tabela_por_texto(processed):
                 if not re.search(
                     r"[A-Za-zÀ-ÿ]",
                     variedade
+                ):
+                    continue
+
+                if any(
+                    ign in variedade.lower()
+                    for ign in [
+                        "vant", "everton", "levantamento", "desenho", "escala",
+                        "decliv", "gestora", "distancia", "distância", "unidade",
+                        "matricula", "matrícula", "ccir", "ambiente", "solo"
+                    ]
                 ):
                     continue
 
@@ -9622,7 +9677,8 @@ def limpar_nome_propriedade(valor):
     """
     if not valor:
         return ""
-    v = " ".join(str(valor).split()).strip(" |:;,-")
+    v = " ".join(str(valor).split()).strip()
+    v = re.sub(r"^[^A-Za-z0-9À-ÿ]+", "", v).strip(" |:;,-")
     
     # 1. Corta qualquer menção a colunas vizinhas (ÁREA TOTAL, CARREADOR, STATUS, etc.)
     padrao_corte = re.compile(
@@ -9631,6 +9687,7 @@ def limpar_nome_propriedade(valor):
         r"[ÁA]REA\s*TOTAL|[ÁA]REATOTAL|[ÁA]REA\s+DE\s+CARREADOR|[ÁA]REA\s+DE\s+CANA|[ÁA]REA\s+SEM\s+PLANTAR"
         r"|[ÁA]REA|AREA|TOTAL|CARREADOR|STATUS|LOCALIZA[CÇ][AÃ]O|LEVANTAMENTO|DECLIV(?:\.|IDADE)?"
         r"|ESCALA|ETAPA|DESENHO|TIPO|DIST[AÂ]NCIA|UNIDADE\s+GESTORA|LATITUDE|LONGITUDE"
+        r"|MATR[IÍ]CULA|CCIR|SOLO|AMBIENTE"
         r")\b.*",
         re.I
     )
@@ -9644,7 +9701,9 @@ def limpar_nome_propriedade(valor):
         v_ant = v
         # Corta cauda iniciada por símbolos ou caracteres não-alfanuméricos (ex: '» =]', '‘(ee', '«(al')
         v = re.sub(r"[\s|/]+[^A-Za-z0-9À-ÿ\s/]+.*$", "", v).strip(" |:;,-")
-        # Corta abreviações órfãs curtas no final (ex: 'E. pa', 'pa', 'ee')
+        # Corta ruídos residuais no final como 'VV SP a, 4' ou 'SP a, 4'
+        v = re.sub(r"\s+(?:VV\s+SP|SP)\s+[a-z0-9]{1,2}\s*,\s*\d+.*$", "", v, flags=re.I).strip(" |:;,-")
+        v = re.sub(r"\s+VV(?:\s+SP)?.*$", "", v, flags=re.I).strip(" |:;,-")
         v = re.sub(r"\s+[A-Za-z]{1,2}(?:\s*\.\s*[A-Za-z]{1,2})*\s*$", "", v).strip(" |:;,-")
         # Remove pontuação residual no final
         v = re.sub(r"[^A-Za-z0-9À-ÿ)]+$", "", v).strip(" |:;,-")
@@ -9660,7 +9719,9 @@ def limpar_nome_proprietario(valor):
     """
     if not valor:
         return ""
-    v = " ".join(str(valor).split()).strip(" |:;,-")
+    v = " ".join(str(valor).split()).strip()
+    v = re.sub(r"^[^A-Za-zÀ-ÿ]+", "", v).strip()
+    v = re.sub(r"\b[xX]{2,}\b|\b[xX\)\(]{3,}\b", "", v).strip(" |:;,-•·~_*()[]{}\x22\x27\u201c\u201d\u2018\u2019")
     
     # 1. Corta qualquer menção a colunas vizinhas
     padrao_corte = re.compile(
@@ -9783,7 +9844,12 @@ def extrair_dados(processed):
                 md["propriedade"] = cand_prop
             elif ("sitio" in _key(cand_prop) and "sitio" not in _key(atual_prop)):
                 md["propriedade"] = cand_prop
-            elif (len(cand_prop) > len(atual_prop) + 4 and len(atual_prop.split()) < len(cand_prop.split())):
+            elif (
+                len(cand_prop) > len(atual_prop) + 4
+                and len(atual_prop.split()) < len(cand_prop.split())
+                and not any(ign in cand_prop.lower() for ign in ["matricula", "matrícula", "ccir", "distancia", "unidade"])
+                and not re.search(r"\b(?:sp|vv|[a-z]{1,2}\s*,\s*\d+)\b", cand_prop, re.I)
+            ):
                 md["propriedade"] = cand_prop
 
     if md.get("propriedade"):

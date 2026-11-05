@@ -173,7 +173,7 @@ def extrair_linhas_excel(documento):
                 continue
 
             var_t = str(talhao.get("variedade") or "").strip()
-            if any(k in var_t.lower() for k in ["bloco", "status", "mapa de", "área total", "resumo de área"]):
+            if any(k in var_t.lower() for k in ["bloco", "status", "mapa de", "área total", "resumo de área", "levantamento", "desenho", "escala", "vant", "everton"]):
                 continue
 
             area_t = str(talhao.get("area") or talhao.get("área") or "").strip()
