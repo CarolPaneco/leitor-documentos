@@ -16,7 +16,7 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 from services.document_processor import get_processor
-from services.agricultural_extractor import extrair_dados, limpar_nome_propriedade, limpar_nome_proprietario, extrair_metadados_nome_arquivo, sanitizar_variedade, extrair_linhas_excel
+from services.agricultural_extractor import extrair_dados, limpar_nome_propriedade, limpar_nome_proprietario, extrair_metadados_nome_arquivo, sanitizar_variedade, extrair_linhas_excel, _v19_normalizar_municipio_valor
 from services.validator import validar_documento
 
 
@@ -79,6 +79,7 @@ def criar_excel(linhas):
     """
 
     import pandas as pd
+    import re
 
     colunas = [
         "Bloco",
@@ -96,15 +97,80 @@ def criar_excel(linhas):
         if not isinstance(item, dict):
             continue
 
+        bloco = str(item.get("Bloco") or item.get("bloco") or "").strip()
+        talhao = str(item.get("Talhão") or item.get("Talhao") or item.get("talhao") or item.get("talhão") or "").strip()
+        variedade = str(item.get("Variedade") or item.get("variedade") or "").strip()
+        area = str(item.get("Área") or item.get("Area") or item.get("area") or item.get("área") or "").strip()
+        plantio = str(item.get("Plantio") or item.get("plantio") or item.get("data_plantio") or "").strip()
+        propriedade = str(item.get("Propriedade") or item.get("propriedade") or "").strip()
+        proprietario = str(item.get("Proprietário") or item.get("Proprietario") or item.get("proprietario") or item.get("proprietário") or "").strip()
+        municipio = str(item.get("Município") or item.get("Municipio") or item.get("municipio") or item.get("município") or "").strip()
+
+        # Descarta linhas de totais ou operadores técnicos vazadas
+        var_low = variedade.lower()
+        t_low = talhao.lower()
+        if any(k in var_low or k in t_low for k in [
+            "total", "subtotal", "sub-total", "resumo", "vant", "everton", "ezequias",
+            "topografo", "piloto", "responsavel", "unidade gestora", "desenho", "escala"
+        ]):
+            continue
+
+        propriedade = limpar_nome_propriedade(propriedade)
+        proprietario = limpar_nome_proprietario(proprietario)
+        municipio = _v19_normalizar_municipio_valor(municipio)
+
+        # Recombina variedade se dividida pelo OCR (ex: 'CTC' + '90,03' -> 'CTC 9003')
+        if variedade.upper() in {"CTC", "RB", "IAC", "CV"} and area:
+            clean_num = area.replace(",", "").replace(".", "").strip()
+            if clean_num.isdigit() and len(clean_num) == 4 and clean_num.startswith(("90", "10", "15", "53")):
+                variedade = f"{variedade} {clean_num}"
+                area = ""
+
+        # Normaliza área inteira sem separador decimal (ex: '873' -> '8,73', '2447' -> '24,47', '038' -> '0,38')
+        if area.isdigit():
+            if area.startswith("0") and len(area) >= 2:
+                area = f"0,{area[1:]}"
+            elif len(area) in (3, 4):
+                area = f"{area[:-2]},{area[-2:]}"
+            elif len(area) in (1, 2) and int(area) > 0:
+                if area == talhao:
+                    area = ""
+                else:
+                    area = f"{area},00"
+
+        # Normaliza ano de plantio e corrige ruídos de OCR (ex: 2071 -> 2021, 96/04/2023 -> 26/04/2023)
+        if plantio:
+            plantio = re.sub(r"\b207(\d)\b", r"202\1", plantio)
+            m_dt = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", plantio)
+            if m_dt:
+                d_val = int(m_dt.group(1))
+                m_val = int(m_dt.group(2))
+                y_val = m_dt.group(3)
+                if d_val > 31 and str(d_val).startswith("9"):
+                    d_fixed = int("2" + str(d_val)[1])
+                    if d_fixed <= 31:
+                        d_val = d_fixed
+                if d_val > 31 or m_val > 12:
+                    plantio = ""
+                else:
+                    plantio = f"{d_val:02d}/{m_val:02d}/{y_val}"
+
+        # Se não há variedade, mas há área e não há plantio -> SEM PLANTAR
+        if not variedade and area and not plantio:
+            variedade = "SEM PLANTAR"
+
+        if any(sp in variedade.upper() for sp in ["SEM PLANTAR", "SEM CULTURA"]):
+            plantio = ""
+
         linhas_normalizadas.append({
-            "Bloco": str(item.get("Bloco") or item.get("bloco") or "").strip(),
-            "Talhão": str(item.get("Talhão") or item.get("Talhao") or item.get("talhao") or item.get("talhão") or "").strip(),
-            "Variedade": str(item.get("Variedade") or item.get("variedade") or "").strip(),
-            "Área": str(item.get("Área") or item.get("Area") or item.get("area") or item.get("área") or "").strip(),
-            "Plantio": str(item.get("Plantio") or item.get("plantio") or item.get("data_plantio") or "").strip(),
-            "Propriedade": str(item.get("Propriedade") or item.get("propriedade") or "").strip(),
-            "Proprietário": str(item.get("Proprietário") or item.get("Proprietario") or item.get("proprietario") or item.get("proprietário") or "").strip(),
-            "Município": str(item.get("Município") or item.get("Municipio") or item.get("municipio") or item.get("município") or "").strip(),
+            "Bloco": bloco,
+            "Talhão": talhao,
+            "Variedade": variedade,
+            "Área": area,
+            "Plantio": plantio,
+            "Propriedade": propriedade,
+            "Proprietário": proprietario,
+            "Município": municipio,
         })
 
     df = pd.DataFrame(

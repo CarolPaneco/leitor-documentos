@@ -10077,13 +10077,17 @@ def limpar_nome_propriedade(valor):
         return ""
     v = " ".join(str(valor).split()).strip()
     v = re.sub(r"^[^A-Za-z0-9À-ÿ]+", "", v).strip(" |:;,-")
+
+    # Invalida propriedades que sejam apenas números, coordenadas UTM ou escalas (ex: '5000000000000', '1:50000')
+    if re.fullmatch(r"[\d\s.,:/-]+", v) or (v.isdigit() and len(v) >= 4):
+        return ""
     
     # 1. Corta qualquer menção a colunas vizinhas (ÁREA TOTAL, CARREADOR, STATUS, etc.)
     padrao_corte = re.compile(
         r"(?:[\s|/]+|^)"
         r"(?:"
         r"[ÁA]REA\s*TOTAL|[ÁA]REATOTAL|[ÁA]REA\s+DE\s+CARREADOR|[ÁA]REA\s+DE\s+CANA|[ÁA]REA\s+SEM\s+PLANTAR"
-        r"|[ÁA]REA|AREA|TOTAL|CARREADOR|STATUS|LOCALIZA[CÇ][AÃ]O|LEVANTAMENTO|DECLIV(?:\.|IDADE)?"
+        r"|[ÁA]REA|AREA|TOTAL\s*:|TOTAL|CARREADOR|STATUS|LOCALIZA[CÇ][AÃ]O|LEVANTAMENTO|DECLIV(?:\.|IDADE)?"
         r"|ESCALA|ETAPA|DESENHO|TIPO|DIST[AÁ]NCIA|UNIDADE\s+GESTORA|LATITUDE|LONGITUDE"
         r"|MATR[IÍ]CULA|CCIR|SOLO|AMBIENTE|VAR\.\s*VEG|V\.\s*VEG|VEGETA[CÇ][AÃ]O"
         r")\b.*",
@@ -10114,6 +10118,9 @@ def limpar_nome_propriedade(valor):
         if v == v_ant:
             break
 
+    # De-duplica palavras repetidas adjacentes produzidas pelo OCR (ex: 'ESPERANCA ESPERANCA' -> 'ESPERANCA')
+    v = re.sub(r"\b([A-Za-zÀ-ÿ]{3,})\s+\1\b", r"\1", v, flags=re.I)
+
     return v
 
 def limpar_nome_proprietario(valor):
@@ -10126,13 +10133,23 @@ def limpar_nome_proprietario(valor):
     v = re.sub(r"^[^A-Za-zÀ-ÿ]+", "", v).strip()
     v = re.sub(r"\b[xX]{2,}\b|\b[xX\)\(]{3,}\b", "", v).strip(" |:;,-•·~_*()[]{}\x22\x27\u201c\u201d\u2018\u2019")
     
-    # 1. Corta qualquer menção a colunas vizinhas
+    # 0. Remove prefixos de cabeçalho fragmentados pelo OCR
+    v = re.sub(
+        r"^(?:(?:prop)?riet[aá]rio|(?:prop)?iet[aá]rio|(?:prop)?jet[aá]rio|et[aá]rio|arrendat[aá]rio|propriedade)\b[\s:.-]*",
+        "",
+        v,
+        flags=re.I
+    ).strip()
+    v = re.sub(r"^BF\s+", "", v, flags=re.I).strip()
+
+    # 1. Corta qualquer menção a colunas ou seções vizinhas
     padrao_corte = re.compile(
         r"(?:[\s|/]+|^)"
         r"(?:"
         r"[ÁA]REA\s*TOTAL|[ÁA]REATOTAL|[ÁA]REA|AREA|TOTAL|CARREADOR|STATUS"
         r"|LOCALIZA[CÇ][AÃ]O|LEVANTAMENTO|DECLIV|ESCALA|DESENHO|TIPO"
         r"|UNIDADE\s+GESTORA|\d+,\d+%"
+        r"|PROPRI(?:EDADE)?|ROPRIEDADE|LADE|MATR[IÍ]CULAS?|CCIR"
         r")\b.*",
         re.I
     )
@@ -10140,6 +10157,8 @@ def limpar_nome_proprietario(valor):
     
     while True:
         v_ant = v
+        # Corta símbolos de aspas/parênteses residuais (ex: '‘(ee', '’(al', '«(ee')
+        v = re.sub(r"[\s|/]+[‘'\"«»(\[][^A-Za-z0-9À-ÿ\s]*[A-Za-z0-9À-ÿ]{0,3}[)\]»]*$", "", v).strip(" |:;,-")
         v = re.sub(r"[\s|/]+[^A-Za-z0-9À-ÿ\s/]+.*$", "", v).strip(" |:;,-")
         m_sigla = re.search(r"\s+([A-Za-z]{1,2}(?:\s*\.\s*[A-Za-z]{1,2})*)\s*$", v)
         if m_sigla:
@@ -10162,7 +10181,39 @@ def _v19_normalizar_municipio_valor(valor):
     valor = " ".join(str(valor or "").split()).strip(" |:-")
     if not valor:
         return ""
-    valor = re.sub(r"\bPlaestina\b", "Palestina", valor, flags=re.I)
+
+    # Rejeita metadados geodésicos ou carimbos/máscaras lidos erroneamente como município
+    v_up = valor.upper()
+    if any(k in v_up for k in ["SIRGAS", "SAD69", "WGS84", "UTM", "DATUM", "FUSO", "MERIDIANO", "XXXX"]):
+        return ""
+
+    cidades_sp = {
+        "tanabi": "Tanabi",
+        "palestina": "Palestina",
+        "plaestina": "Palestina",
+        "nova granada": "Nova Granada",
+        "mirassol": "Mirassol",
+        "cosmorama": "Cosmorama",
+        "balsamo": "Bálsamo",
+        "bálsamo": "Bálsamo",
+        "monte aprazivel": "Monte Aprazível",
+        "monte aprazível": "Monte Aprazível",
+        "guapiaçu": "Guapiaçu",
+        "guapiacu": "Guapiaçu",
+        "riolandia": "Riolândia",
+        "riolândia": "Riolândia",
+        "votuporanga": "Votuporanga",
+        "sao jose do rio preto": "São José do Rio Preto",
+        "são josé do rio preto": "São José do Rio Preto",
+        "olimpia": "Olímpia",
+        "olímpia": "Olímpia",
+    }
+    v_norm = re.sub(r"\bPlaestina\b", "Palestina", valor, flags=re.I)
+    v_clean = " ".join(v_norm.split()).lower()
+    if v_clean in cidades_sp:
+        return f"{cidades_sp[v_clean]} - SP"
+
+    valor = v_norm
 
     m = re.search(
         r"^(.+?)\s*[-–]\s*([A-Za-z]{2})$",
@@ -10638,9 +10689,42 @@ def extrair_linhas_excel(documento):
 
             area_t = str(talhao.get("area") or talhao.get("área") or "").strip()
             plantio_t = str(talhao.get("plantio") or talhao.get("data_plantio") or "").strip()
-            m_dt = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", plantio_t)
-            if m_dt:
-                plantio_t = f"{int(m_dt.group(1)):02d}/{int(m_dt.group(2)):02d}/{m_dt.group(3)}"
+
+            # Recombina variedade dividida pelo OCR (ex: Variedade 'CTC', Área '90,03' -> 'CTC 9003')
+            if var_t.upper() in {"CTC", "RB", "IAC", "CV"} and area_t:
+                num_var = area_t.replace(",", "").replace(".", "").strip()
+                if num_var.isdigit() and len(num_var) == 4 and num_var.startswith(("90", "10", "15", "53")):
+                    var_t = f"{var_t} {num_var}"
+                    area_t = ""
+
+            # Normaliza área inteira sem separador decimal (ex: '873' -> '8,73', '2447' -> '24,47', '038' -> '0,38')
+            if area_t.isdigit():
+                if area_t.startswith("0") and len(area_t) >= 2:
+                    area_t = f"0,{area_t[1:]}"
+                elif len(area_t) in (3, 4):
+                    area_t = f"{area_t[:-2]},{area_t[-2:]}"
+                elif len(area_t) in (1, 2) and int(area_t) > 0:
+                    if area_t == t_num:
+                        area_t = ""
+                    else:
+                        area_t = f"{area_t},00"
+
+            # Normaliza data e corrige ruídos de OCR em ano ou dia (ex: 2071 -> 2021, 96/04/2023 -> 26/04/2023)
+            if plantio_t:
+                plantio_t = re.sub(r"\b207(\d)\b", r"202\1", plantio_t)
+                m_dt = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", plantio_t)
+                if m_dt:
+                    d_val = int(m_dt.group(1))
+                    m_val = int(m_dt.group(2))
+                    y_val = m_dt.group(3)
+                    if d_val > 31 and str(d_val).startswith("9"):
+                        d_fixed = int("2" + str(d_val)[1])
+                        if d_fixed <= 31:
+                            d_val = d_fixed
+                    if d_val > 31 or m_val > 12:
+                        plantio_t = ""
+                    else:
+                        plantio_t = f"{d_val:02d}/{m_val:02d}/{y_val}"
 
             chave = (codigo_bloco, t_num, var_t, area_t, plantio_t)
             if chave in vistos:
@@ -10683,6 +10767,9 @@ def extrair_linhas_excel(documento):
             if m_santa and re.match(r"^L[uú]cia\b", row_proprietario, re.I):
                 row_propriedade = m_santa.group(1).strip()
                 row_proprietario = f"Santa {row_proprietario}".strip()
+
+            if not var_final and area_t and not plantio_t:
+                var_final = "SEM PLANTAR"
 
             if any(sp in var_final.upper() for sp in ["SEM PLANTAR", "SEM CULTURA"]):
                 plantio_t = ""
