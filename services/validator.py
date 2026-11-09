@@ -30,8 +30,13 @@ def validar_documento(documento):
     for bloco in documento.get("blocos") or []:
         for talhao in bloco.get("talhoes") or []:
             total += 1
+            var_t = str(talhao.get("variedade", "") or "").strip().upper()
+            campos_obrig = [
+                c for c in CAMPOS_TALHAO_OBRIGATORIOS
+                if not (c == "plantio" and any(sp in var_t for sp in ["SEM PLANTAR", "SEM CULTURA"]))
+            ]
             faltantes = [
-                campo for campo in CAMPOS_TALHAO_OBRIGATORIOS
+                campo for campo in campos_obrig
                 if not str(talhao.get(campo, "") or "").strip()
             ]
             if faltantes:
