@@ -8227,7 +8227,7 @@ def _v17_normalizar_area_ocr(valor):
     if re.search(r"[A-Za-zÀ-ÿ]", valor):
         return ""
 
-    valor = re.sub(r"[^0-9,\.]", "", valor)
+    valor = re.sub(r"[^0-9,\.]", "", valor).strip(" ,.")
 
     if not valor:
         return ""
@@ -8284,11 +8284,23 @@ def _v18_extrair_tabelas_grade(caminho):
 
     cnts, _ = _cv2_v12.findContours(grid, _cv2_v12.RETR_TREE, _cv2_v12.CHAIN_APPROX_SIMPLE)
 
-    tabelas_encontradas = []
+    tabelas_originais = []
     for c in cnts:
         bx, by, bw_box, bh_box = _cv2_v12.boundingRect(c)
         if bw_box > 250 and bh_box > 80 and bw_box < w_img * 0.70 and bh_box < h_img * 0.70 and (bw_box * bh_box) < (w_img * h_img * 0.35):
-            tabelas_encontradas.append((bx, by, bw_box, bh_box))
+            tabelas_originais.append((bx, by, bw_box, bh_box))
+
+    # Verifica quais tabelas originais contêm cabeçalho com talhão
+    tabelas_com_talhao = []
+    outras_originais = []
+    for b in tabelas_originais:
+        bx, by, bw_b, bh_b = b
+        crop_h = img[by : by + min(60, bh_b), bx : bx + bw_b]
+        txt_h = _pytesseract_v12.image_to_string(crop_h, lang="por+eng", config="--psm 6").lower()
+        if "talh" in txt_h:
+            tabelas_com_talhao.append(b)
+        else:
+            outras_originais.append(b)
 
     cell_boxes = []
     for c in cnts:
@@ -8296,6 +8308,7 @@ def _v18_extrair_tabelas_grade(caminho):
         if 50 < cbw < 400 and 18 < cbh < 75:
             cell_boxes.append((cbx, cby, cbw, cbh))
 
+    tabelas_dilatadas = []
     if len(cell_boxes) >= 6:
         cell_mask = np.zeros((h_img, w_img), dtype=np.uint8)
         for cbx, cby, cbw, cbh in cell_boxes:
@@ -8306,29 +8319,46 @@ def _v18_extrair_tabelas_grade(caminho):
         for tc in table_cnts:
             tbx, tby, tbw, tbh = _cv2_v12.boundingRect(tc)
             if tbw > 250 and tbh > 80 and tbw < w_img * 0.70 and tbh < h_img * 0.70 and (tbw * tbh) < (w_img * h_img * 0.35):
-                tabelas_encontradas.append((tbx, tby, tbw, tbh))
+                tabelas_dilatadas.append((tbx, tby, tbw, tbh))
 
-    # Desduplicação de caixas de contorno concêntricas ou sobrepostas (NMS com IoU real)
-    tabelas_ordenadas = sorted(tabelas_encontradas, key=lambda b: b[2] * b[3], reverse=True)
-    tabelas_desduplicadas = []
-    for b in tabelas_ordenadas:
-        bx, by, bw_b, bh_b = b
+    # Prioridade ABSOLUTA para tabelas_com_talhao originais!
+    tabelas_candidatas = list(tabelas_com_talhao)
+
+    # Adiciona tabelas dilatadas apenas se não sobrepuserem tabelas_com_talhao
+    for db in tabelas_dilatadas:
+        dbx, dby, dbw, dbh = db
         sobrepos = False
-        for mx, my, mw, mh in tabelas_desduplicadas:
-            ix1 = max(bx, mx)
-            iy1 = max(by, my)
-            ix2 = min(bx + bw_b, mx + mw)
-            iy2 = min(by + bh_b, my + mh)
+        for tb in tabelas_com_talhao:
+            ix1 = max(dbx, tb[0])
+            iy1 = max(dby, tb[1])
+            ix2 = min(dbx + dbw, tb[0] + tb[2])
+            iy2 = min(dby + dbh, tb[1] + tb[3])
             if ix2 > ix1 and iy2 > iy1:
-                inter_area = (ix2 - ix1) * (iy2 - iy1)
-                union_area = (bw_b * bh_b) + (mw * mh) - inter_area
-                if inter_area / union_area > 0.40:
+                inter = (ix2 - ix1) * (iy2 - iy1)
+                if inter / (dbw * dbh) > 0.20 or inter / (tb[2] * tb[3]) > 0.20:
                     sobrepos = True
                     break
         if not sobrepos:
-            tabelas_desduplicadas.append(b)
+            tabelas_candidatas.append(db)
 
-    tabelas_encontradas = sorted(tabelas_desduplicadas, key=lambda b: (b[1], b[0]))
+    # Adiciona outras originais se não sobrepuserem
+    for ob in outras_originais:
+        obx, oby, obw, obh = ob
+        sobrepos = False
+        for cb in tabelas_candidatas:
+            ix1 = max(obx, cb[0])
+            iy1 = max(oby, cb[1])
+            ix2 = min(obx + obw, cb[0] + cb[2])
+            iy2 = min(oby + obh, cb[1] + cb[3])
+            if ix2 > ix1 and iy2 > iy1:
+                inter = (ix2 - ix1) * (iy2 - iy1)
+                if inter / (obw * obh) > 0.20 or inter / (cb[2] * cb[3]) > 0.20:
+                    sobrepos = True
+                    break
+        if not sobrepos:
+            tabelas_candidatas.append(ob)
+
+    tabelas_encontradas = sorted(tabelas_candidatas, key=lambda b: (b[1], b[0]))
     todos_registros = []
 
     for bx, by, bw_box, bh_box in tabelas_encontradas:
@@ -8412,8 +8442,22 @@ def _v18_extrair_tabelas_grade(caminho):
             # Coluna de variedade: DEVE conter "var", "cult" ou "especie" e NUNCA ser proprietario/fazenda/area/data
             col_var = next((c for c in range(start_col, end_col) if ("var" in headers[c] or "cult" in headers[c] or "especie" in headers[c]) and c not in (col_talhao, col_proprio, col_prop, col_area, col_plantio)), None)
 
-            if col_area is None:
-                col_area = next((c for c in range(start_col, end_col) if c not in (col_talhao, col_var, col_plantio, col_proprio, col_prop)), None)
+            # Fallbacks inteligentes para tabela padrão de 4 colunas (Talhão, Variedade, Área, Plantio)
+            num_cols = end_col - start_col
+            if num_cols == 4:
+                if col_var is None:
+                    col_var = start_col + 1
+                if col_area is None:
+                    col_area = start_col + 2
+                if col_plantio is None:
+                    col_plantio = start_col + 3
+            else:
+                if col_area is None:
+                    col_area = next((c for c in range(start_col, end_col) if c not in (col_talhao, col_var, col_plantio, col_proprio, col_prop)), None)
+                if col_plantio is None and num_cols >= 3:
+                    unassigned = [c for c in range(start_col, end_col) if c not in (col_talhao, col_var, col_area, col_proprio, col_prop)]
+                    if unassigned:
+                        col_plantio = unassigned[-1]
 
             if col_talhao is None or col_area is None:
                 continue
@@ -8449,21 +8493,54 @@ def _v18_extrair_tabelas_grade(caminho):
                     inner_v = cell_v[3:-3, 6:-6] if vh > 6 and vw > 12 else cell_v
                     v_txt = _pytesseract_v12.image_to_string(inner_v, config="--psm 6").strip()
 
+                row_crop = crop[y1:y2, :]
+                row_txt = _pytesseract_v12.image_to_string(row_crop, config="--psm 6").strip()
+
                 a_txt = ""
                 if col_area is not None and col_area < len(clustered_x) - 1:
                     cell_a = crop[y1:y2, clustered_x[col_area] : clustered_x[col_area + 1]]
-                    ah, aw = cell_a.shape[:2]
-                    inner_a = cell_a[3:-3, 6:-6] if ah > 6 and aw > 12 else cell_a
-                    a_txt = _pytesseract_v12.image_to_string(inner_a, config="--psm 6").strip()
+                    a_txt = _pytesseract_v12.image_to_string(cell_a, config="--psm 6").strip()
+                    area_cand = _v17_normalizar_area_ocr(a_txt)
+                    
+                    m_row_areas = re.findall(r"\b\d{1,3}[,\.]\d{1,2}\b", row_txt)
+                    if m_row_areas:
+                        if not area_cand or ("," not in a_txt and "." not in a_txt):
+                            a_txt = m_row_areas[-1]
+                        elif area_cand:
+                            try:
+                                v_cell = float(area_cand.replace(",", "."))
+                                v_row = float(m_row_areas[-1].replace(",", "."))
+                                if v_cell > v_row * 3 and ("," not in a_txt and "." not in a_txt):
+                                    a_txt = m_row_areas[-1]
+                            except Exception:
+                                pass
+
+                    if not _v17_normalizar_area_ocr(a_txt):
+                        ah, aw = cell_a.shape[:2]
+                        inner_a = cell_a[2:-2, 2:-2] if ah > 6 and aw > 12 else cell_a
+                        a_txt_inner = _pytesseract_v12.image_to_string(inner_a, config="--psm 6").strip()
+                        if _v17_normalizar_area_ocr(a_txt_inner):
+                            a_txt = a_txt_inner
 
                 p_txt = ""
                 if col_plantio is not None and col_plantio < len(clustered_x) - 1:
                     cell_p = crop[y1:y2, clustered_x[col_plantio] : clustered_x[col_plantio + 1]]
-                    ph, pw = cell_p.shape[:2]
-                    inner_p = cell_p[3:-3, 6:-6] if ph > 6 and pw > 12 else cell_p
-                    p_txt = _pytesseract_v12.image_to_string(inner_p, config="--psm 6").strip()
+                    p_txt = _pytesseract_v12.image_to_string(cell_p, config="--psm 6").strip()
+                    if not _v11_normalizar_data(p_txt):
+                        ph, pw = cell_p.shape[:2]
+                        inner_p = cell_p[2:-2, 4:-4] if ph > 6 and pw > 12 else cell_p
+                        p_txt_inner = _pytesseract_v12.image_to_string(inner_p, config="--psm 6").strip()
+                        if _v11_normalizar_data(p_txt_inner):
+                            p_txt = p_txt_inner
 
-                data_norm = _v11_normalizar_data(p_txt) or p_txt
+                data_norm = _v11_normalizar_data(p_txt)
+                if not data_norm:
+                    if any(sp in v_txt.upper() for sp in ["SEM PLANTAR", "SEM CULTURA"]):
+                        data_norm = ""
+                    elif re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|(?:19|20)\d{2})\b", p_txt):
+                        data_norm = p_txt
+                    else:
+                        data_norm = ""
 
                 m_num = re.search(r"\b\d{1,4}\b", t_txt)
                 talhao_num = ""
@@ -8566,27 +8643,67 @@ def _v18_extrair_tabelas_grade(caminho):
                     rec_item["proprietario"] = limpar_nome_proprietario(proprio_txt)
                 registros_sub.append(rec_item)
 
-            for idx, rec in enumerate(registros_sub):
-                if not rec["talhao"]:
-                    if idx == 0 and len(registros_sub) > 1 and registros_sub[1]["talhao"] == "2":
-                        rec["talhao"] = "1"
-                    elif 0 < idx < len(registros_sub) - 1:
-                        p_val = registros_sub[idx - 1]["talhao"]
-                        n_val = registros_sub[idx + 1]["talhao"]
-                        if p_val.isdigit() and n_val.isdigit() and int(n_val) - int(p_val) == 2:
-                            rec["talhao"] = str(int(p_val) + 1)
-                    elif idx > 0 and registros_sub[idx - 1]["talhao"].isdigit():
-                        rec["talhao"] = str(int(registros_sub[idx - 1]["talhao"]) + 1)
-                elif idx == 0 and len(registros_sub) > 1 and registros_sub[1]["talhao"] in {"2", "3"}:
-                    if rec["talhao"] in {"41", "11", "4", "7"}:
-                        rec["talhao"] = "1"
-                elif 0 < idx < len(registros_sub) - 1:
-                    p_val = registros_sub[idx - 1]["talhao"]
-                    n_val = registros_sub[idx + 1]["talhao"]
-                    if p_val.isdigit() and n_val.isdigit() and int(n_val) - int(p_val) == 2:
-                        # Se o talhão atual for incoerente com a sequência p_val e n_val
-                        if not rec["talhao"] or int(rec["talhao"]) > 100 or abs(int(rec["talhao"]) - int(p_val)) != 1:
-                            rec["talhao"] = str(int(p_val) + 1)
+            n_sub = len(registros_sub)
+            if n_sub > 0:
+                for i, r in enumerate(registros_sub):
+                    t_raw = str(r.get("talhao", "")).strip()
+                    m = re.findall(r"\b\d{1,4}\b", t_raw)
+                    cands = [int(x) for x in m if int(x) < 500]
+                    r["_num_cand"] = cands[-1] if cands else None
+
+                if registros_sub[0]["_num_cand"] in (4, 7, 11, 41) and n_sub > 1 and registros_sub[1]["_num_cand"] == 2:
+                    registros_sub[0]["_num_cand"] = 1
+
+                for i in range(n_sub):
+                    cand = registros_sub[i]["_num_cand"]
+                    if cand is not None:
+                        prev_vals = [registros_sub[j]["_num_cand"] for j in range(i-1, -1, -1) if registros_sub[j]["_num_cand"] is not None]
+                        next_vals = [registros_sub[j]["_num_cand"] for j in range(i+1, n_sub) if registros_sub[j]["_num_cand"] is not None]
+                        p_val = prev_vals[0] if prev_vals else None
+                        n_val = next_vals[0] if next_vals else None
+                        if p_val is not None and n_val is not None:
+                            if p_val < n_val and (cand > n_val or cand < p_val):
+                                p_idx = next(j for j in range(i-1, -1, -1) if registros_sub[j]["_num_cand"] is not None)
+                                n_idx = next(j for j in range(i+1, n_sub) if registros_sub[j]["_num_cand"] is not None)
+                                if n_val - p_val == 2 and n_idx - p_idx == 2:
+                                    registros_sub[i]["_num_cand"] = p_val + 1
+                                else:
+                                    registros_sub[i]["_num_cand"] = None
+
+                for i in range(n_sub):
+                    if registros_sub[i]["_num_cand"] is None:
+                        p_idx = next((j for j in range(i-1, -1, -1) if registros_sub[j]["_num_cand"] is not None), None)
+                        n_idx = next((j for j in range(i+1, n_sub) if registros_sub[j]["_num_cand"] is not None), None)
+                        p_val = registros_sub[p_idx]["_num_cand"] if p_idx is not None else None
+                        n_val = registros_sub[n_idx]["_num_cand"] if n_idx is not None else None
+                        if p_val is not None and n_val is not None:
+                            gap_slots = n_idx - p_idx - 1
+                            val_diff = n_val - p_val
+                            if val_diff == 0 or val_diff == 1:
+                                registros_sub[i]["_num_cand"] = p_val
+                            elif val_diff == 2 and gap_slots == 2:
+                                registros_sub[i]["_num_cand"] = p_val + 1
+                            elif val_diff == gap_slots + 1:
+                                offset = i - p_idx
+                                registros_sub[i]["_num_cand"] = p_val + offset
+                            else:
+                                offset = i - p_idx
+                                registros_sub[i]["_num_cand"] = min(p_val + offset, n_val)
+                        elif p_val is not None:
+                            var = str(registros_sub[i].get("variedade", "")).upper()
+                            if "SEM" in var and registros_sub[p_idx].get("variedade", "").upper() != "SEM PLANTAR":
+                                registros_sub[i]["_num_cand"] = p_val
+                            else:
+                                registros_sub[i]["_num_cand"] = p_val + (i - p_idx)
+                        elif n_val is not None:
+                            registros_sub[i]["_num_cand"] = max(1, n_val - (n_idx - i))
+                        else:
+                            registros_sub[i]["_num_cand"] = i + 1
+
+                for r in registros_sub:
+                    if r.get("_num_cand") is not None:
+                        r["talhao"] = str(r["_num_cand"])
+                        r.pop("_num_cand", None)
 
             todos_registros.extend([r for r in registros_sub if r["talhao"]])
 
@@ -8783,7 +8900,7 @@ def _v17_tabela_por_texto(processed):
             continue
 
         fim = -1
-        for delim in ["bloco:", "bloco ", "\nbloco", "tereos", "proprietário", "proprietario", "propriedade:", "propriedade ", "área de cana", "area de cana", "resumo de", "resumo"]:
+        for delim in ["bloco:", "bloco ", "\nbloco", "tereos", "proprietário:", "proprietario:", "propriedade:", "propriedade ", "unidade gestora:", "unidade:"]:
             pos = texto.lower().find(delim, inicio)
             if pos > 0 and (fim < 0 or pos < fim):
                 fim = pos
@@ -8867,16 +8984,17 @@ def _v17_tabela_por_texto(processed):
                     continue
 
                 # Evita que o OCR de RESUMO/ÁREAS seja confundido
-                # com uma variedade. Códigos como CTC9006 continuam
-                # válidos porque o número está dentro do token.
-                if any(
-                    re.fullmatch(
-                        r"\d+(?:[.,]\d+)?",
-                        token,
-                    )
-                    for token in variedade.split()
-                ):
-                    continue
+                # com uma variedade. Códigos como CTC 1007 continuam
+                # válidos porque começam com prefixo de variedade.
+                if not re.match(r"^(?:CTC|RB|IAC|SP|CV|ADV)\b", variedade, re.I):
+                    if any(
+                        re.fullmatch(
+                            r"\d+(?:[.,]\d+)?",
+                            token,
+                        )
+                        for token in variedade.split()
+                    ):
+                        continue
 
                 variedade_norm = _v11_normalizar_variedade(
                     variedade.split()
@@ -9351,7 +9469,27 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
             compativeis = []
             for r in candidatos_mesmo_talhao:
                 r_var_key = _key(str(r.get("variedade", "")))
-                if r_var_key and var_novo_key and r_var_key != var_novo_key:
+                r_area = str(r.get("area", "")).replace(".", ",").strip()
+                novo_area = str(novo.get("area", "")).replace(".", ",").strip()
+
+                var_compativel = (
+                    not r_var_key
+                    or not var_novo_key
+                    or r_var_key == var_novo_key
+                    or r_var_key in var_novo_key
+                    or var_novo_key in r_var_key
+                )
+
+                area_compativel = False
+                if r_area and novo_area:
+                    try:
+                        area_compativel = abs(float(r_area.replace(",", ".")) - float(novo_area.replace(",", "."))) < 0.05
+                    except Exception:
+                        area_compativel = (r_area == novo_area)
+                elif not r_area or not novo_area:
+                    area_compativel = True
+
+                if not var_compativel and not area_compativel:
                     continue
 
                 r_plan = str(r.get("plantio", "")).strip()
@@ -9364,7 +9502,7 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
                 r_plan_n = _norm_data_local(r_plan)
                 novo_plan_n = _norm_data_local(novo_plan)
 
-                if r_var_key == var_novo_key and r_plan_n and novo_plan_n and r_plan_n == novo_plan_n:
+                if (var_compativel or area_compativel) and (not r_plan_n or not novo_plan_n or r_plan_n == novo_plan_n):
                     compativeis.append(r)
                     continue
 
@@ -9376,9 +9514,7 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
                     compativeis.append(r)
                     continue
 
-                r_area = str(r.get("area", "")).replace(".", ",").strip()
-                novo_area = str(novo.get("area", "")).replace(".", ",").strip()
-                if r_area and novo_area and r_area != novo_area:
+                if r_area and novo_area and not area_compativel:
                     continue
                 if r_plan_n and novo_plan_n and r_plan_n != novo_plan_n:
                     continue
@@ -9418,7 +9554,7 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
             ):
                 alvo[campo] = novo[campo]
 
-    # Deduplicação segura de SEM PLANTAR quando o talhão já possui variedade cultivada
+    # Deduplicação segura de SEM PLANTAR: só descarta se a área for idêntica à de uma variedade cultivada
     por_talhao = {}
     for r in base:
         t_id = str(r.get("talhao", "")).strip()
@@ -9427,12 +9563,41 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
     base_limpa = []
     for t_id, lista in por_talhao.items():
         if len(lista) > 1:
-            reais = [r for r in lista if str(r.get("variedade", "")).strip().upper() != "SEM PLANTAR"]
-            sem_pl = [r for r in lista if str(r.get("variedade", "")).strip().upper() == "SEM PLANTAR"]
-            if reais and sem_pl:
-                base_limpa.extend(reais)
-                continue
-        base_limpa.extend(lista)
+            itens_mantidos = []
+            for r in lista:
+                var_r = str(r.get("variedade", "")).strip().upper()
+                area_r_str = str(r.get("area", "")).replace(",", ".").strip()
+                try:
+                    area_r_val = float(area_r_str)
+                except Exception:
+                    area_r_val = None
+
+                if var_r in {"SEM PLANTAR", "SEM CULTURA"}:
+                    duplicado = False
+                    for outro in lista:
+                        if outro is r:
+                            continue
+                        var_o = str(outro.get("variedade", "")).strip().upper()
+                        if var_o not in {"SEM PLANTAR", "SEM CULTURA", ""}:
+                            area_o_str = str(outro.get("area", "")).replace(",", ".").strip()
+                            try:
+                                area_o_val = float(area_o_str)
+                            except Exception:
+                                area_o_val = None
+                            if area_r_val is not None and area_o_val is not None:
+                                if abs(area_r_val - area_o_val) < 0.05:
+                                    duplicado = True
+                                    break
+                            elif not area_r_str or area_r_str == area_o_str:
+                                duplicado = True
+                                break
+                    if not duplicado:
+                        itens_mantidos.append(r)
+                else:
+                    itens_mantidos.append(r)
+            base_limpa.extend(itens_mantidos)
+        else:
+            base_limpa.extend(lista)
     base = base_limpa
 
     # Ordenação estável por página/talhão.
@@ -9494,14 +9659,14 @@ def _v17_metadados_texto_limpo(processed):
         # Verifica primeiro se o proprietário está na própria linha (inline)
         m_inline = re.search(r"(?:propriet[aá]rio|arrendat[aá]rio)\s*:?\s*([A-Za-zÀ-ÿ].*)", linha, re.I)
         if m_inline:
-            cand_inline = re.split(r"\b(?:[AÁ]rea|Carreador|Status|Unidade|\d+,\d+%)\b", m_inline.group(1), flags=re.I)[0].strip(" |:-")
+            cand_inline = re.split(r"(?i)(?:\bde\s*)?carreador|\b(?:[aá]rea|status|unidade|\d+,\d+%)\b", m_inline.group(1))[0].strip(" |:-")
             palavras_inl = re.findall(r"[A-Za-zÀ-ÿ]{2,}", cand_inline)
             if len(palavras_inl) >= 2 and not any(ign in cand_inline.lower() for ign in ["matricula", "ccir", "distancia", "escala"]):
                 resultado["proprietario"] = " ".join(cand_inline.split())
                 break
 
         for prox in linhas[i + 1:i + 4]:
-            prox_limpo = re.split(r"\b(?:[AÁ]rea\s+de\s+Carreador|[AÁ]rea\s+Total|Status:?|Unidade\s+Gestora|\d+,\d+%)\b", prox, flags=re.I)[0].strip(" |:-")
+            prox_limpo = re.split(r"(?i)(?:\bde\s*)?carreador|\b(?:[aá]rea\s+de\s+carreador|[aá]rea\s+total|status:?|unidade\s+gestora|\d+,\d+%)\b", prox)[0].strip(" |:-")
             palavras = re.findall(r"[A-Za-zÀ-ÿ]{2,}", prox_limpo)
             eh_multiplo = ("/" in prox_limpo and len(palavras) >= 4)
             tem_empresa = bool(re.search(r"\b(?:LTDA|S\.?A\.?|ME|EPP|EIRELI|INCORP|AGRO)\b", prox_limpo, re.I))
@@ -10061,16 +10226,19 @@ def extrair_dados(processed):
     if md_texto.get("proprietario"):
         atual = str(md.get("proprietario") or "")
         cand_prop = md_texto["proprietario"]
-        if not any(k in _key(cand_prop) for k in ["carreador", "area", "status", "unidade gestora", "(%)"]):
+        cand_prop_limpo = re.split(r"(?i)(?:\bde\s*)?carreador|\b(?:[aá]rea|status|\d+,\d+%)\b", cand_prop)[0].strip(" |:;,-")
+        cand_prop_limpo = limpar_nome_proprietario(cand_prop_limpo)
+        if cand_prop_limpo and not any(k in _key(cand_prop_limpo) for k in ["carreador", "area", "status", "unidade gestora", "(%)"]):
             if (
                 not atual
                 or "canto" in _key(atual)
-                or (len(cand_prop) > len(atual) + 5 and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", atual)) < 2)
+                or (len(cand_prop_limpo) > len(atual) + 5 and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", atual)) < 2)
+                or ("participacoes" in _key(cand_prop_limpo) and "participacoes" not in _key(atual))
             ):
-                md["proprietario"] = cand_prop
+                md["proprietario"] = cand_prop_limpo
 
     if md.get("proprietario"):
-        md["proprietario"] = re.split(r"\b(?:[AÁ]rea|Carreador|Status|\d+,\d+%)\b", md["proprietario"], flags=re.I)[0].strip(" |:;,-")
+        md["proprietario"] = re.split(r"(?i)(?:\bde\s*)?carreador|\b(?:[aá]rea|status|\d+,\d+%)\b", md["proprietario"])[0].strip(" |:;,-")
         partes_p = md["proprietario"].split()
         limpas_p = []
         for p in partes_p:
@@ -10130,29 +10298,26 @@ def extrair_dados(processed):
         or []
     )
 
-    resgate = []
+    resgate = _v17_tabela_por_texto(
+        processed
+    )
     grade_resgate = []
-
-    if len(existentes) < 4:
-        resgate = _v17_tabela_por_texto(
-            processed
+    paginas = (
+        processed.get("paginas")
+        or processed.get("pages")
+        or []
+    )
+    pasta = processed.get("pasta_saida", "")
+    for page_index, _page in enumerate(paginas):
+        caminho = _os_v12.path.join(
+            pasta,
+            f"pagina_{page_index + 1:03d}.png",
         )
-        paginas = (
-            processed.get("paginas")
-            or processed.get("pages")
-            or []
-        )
-        pasta = processed.get("pasta_saida", "")
-        for page_index, _page in enumerate(paginas):
-            caminho = _os_v12.path.join(
-                pasta,
-                f"pagina_{page_index + 1:03d}.png",
-            )
-            if _os_v12.path.exists(caminho):
-                regs = _v18_extrair_tabelas_grade(caminho)
-                for r in regs:
-                    r["pagina"] = page_index
-                grade_resgate.extend(regs)
+        if _os_v12.path.exists(caminho):
+            regs = _v18_extrair_tabelas_grade(caminho)
+            for r in regs:
+                r["pagina"] = page_index
+            grade_resgate.extend(regs)
 
     # Recupera células tanto das linhas novas quanto das linhas que a
     # versão anterior já encontrou, mas deixou com campo vazio.
@@ -10519,6 +10684,11 @@ def extrair_linhas_excel(documento):
                 row_propriedade = m_santa.group(1).strip()
                 row_proprietario = f"Santa {row_proprietario}".strip()
 
+            if any(sp in var_final.upper() for sp in ["SEM PLANTAR", "SEM CULTURA"]):
+                plantio_t = ""
+            elif plantio_t and not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|(?:19|20)\d{2})\b", plantio_t):
+                plantio_t = ""
+
             linhas.append({
                 "Bloco": str(
                     talhao.get("bloco")
@@ -10547,12 +10717,41 @@ def extrair_linhas_excel(documento):
     linhas_finais = []
     for chave_t, grupo in linhas_por_talhao.items():
         if len(grupo) > 1:
-            reais = [r for r in grupo if r.get("Variedade", "").strip().upper() not in {"SEM PLANTAR", "SEM CULTURA", ""}]
-            sem_pl = [r for r in grupo if r.get("Variedade", "").strip().upper() in {"SEM PLANTAR", "SEM CULTURA"}]
-            if reais and sem_pl:
-                linhas_finais.extend(reais)
-                continue
-        linhas_finais.extend(grupo)
+            itens_mantidos = []
+            for r in grupo:
+                var_r = str(r.get("Variedade", "")).strip().upper()
+                area_r_str = str(r.get("Área", "")).replace(",", ".").strip()
+                try:
+                    area_r_val = float(area_r_str)
+                except Exception:
+                    area_r_val = None
+
+                if var_r in {"SEM PLANTAR", "SEM CULTURA"}:
+                    duplicado = False
+                    for outro in grupo:
+                        if outro is r:
+                            continue
+                        var_o = str(outro.get("Variedade", "")).strip().upper()
+                        if var_o not in {"SEM PLANTAR", "SEM CULTURA", ""}:
+                            area_o_str = str(outro.get("Área", "")).replace(",", ".").strip()
+                            try:
+                                area_o_val = float(area_o_str)
+                            except Exception:
+                                area_o_val = None
+                            if area_r_val is not None and area_o_val is not None:
+                                if abs(area_r_val - area_o_val) < 0.05:
+                                    duplicado = True
+                                    break
+                            elif not area_r_str or area_r_str == area_o_str:
+                                duplicado = True
+                                break
+                    if not duplicado:
+                        itens_mantidos.append(r)
+                else:
+                    itens_mantidos.append(r)
+            linhas_finais.extend(itens_mantidos)
+        else:
+            linhas_finais.extend(grupo)
 
     # Deduplica talhão 41 fantasma gerado por OCR de linha de grade (| 1 -> 41)
     tem_1 = any(str(l.get("Talhão") or l.get("Talhao") or "").strip() == "1" for l in linhas_finais)
