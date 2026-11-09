@@ -80,6 +80,7 @@ def criar_excel(linhas):
 
     import pandas as pd
     import re
+    from collections import Counter
 
     colunas = [
         "Bloco",
@@ -91,6 +92,16 @@ def criar_excel(linhas):
         "Proprietário",
         "Município",
     ]
+
+    # Determina o ano padrão da safra/documento a partir dos plantios válidos do lote
+    anos_linhas = []
+    for it in (linhas or []):
+        if isinstance(it, dict):
+            p_val = str(it.get("Plantio") or it.get("plantio") or it.get("data_plantio") or "")
+            m_p = re.search(r"\b(20[1-3]\d)\b", p_val)
+            if m_p:
+                anos_linhas.append(m_p.group(1))
+    ano_padrao = Counter(anos_linhas).most_common(1)[0][0] if anos_linhas else "2026"
 
     linhas_normalizadas = []
     for item in (linhas or []):
@@ -111,7 +122,8 @@ def criar_excel(linhas):
         t_low = talhao.lower()
         if any(k in var_low or k in t_low for k in [
             "total", "subtotal", "sub-total", "resumo", "vant", "everton", "ezequias",
-            "topografo", "piloto", "responsavel", "unidade gestora", "desenho", "escala"
+            "topografo", "piloto", "responsavel", "unidade gestora", "desenho", "escala",
+            "soma", "área total", "area total"
         ]):
             continue
 
@@ -159,8 +171,16 @@ def criar_excel(linhas):
         if not variedade and area and not plantio:
             variedade = "SEM PLANTAR"
 
+        # Preenche com ano da safra/documento se for SEM PLANTAR conforme preferência do usuário
         if any(sp in variedade.upper() for sp in ["SEM PLANTAR", "SEM CULTURA"]):
+            if not plantio or not re.search(r"\b20[1-3]\d\b", plantio):
+                plantio = ano_padrao
+        elif plantio and not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|(?:19|20)\d{2})\b", plantio):
             plantio = ""
+
+        # Descarta linhas fantasmas sem variedade e sem área
+        if not variedade and not area:
+            continue
 
         linhas_normalizadas.append({
             "Bloco": bloco,

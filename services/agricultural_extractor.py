@@ -10088,7 +10088,7 @@ def limpar_nome_propriedade(valor):
         r"(?:"
         r"[ÁA]REA\s*TOTAL|[ÁA]REATOTAL|[ÁA]REA\s+DE\s+CARREADOR|[ÁA]REA\s+DE\s+CANA|[ÁA]REA\s+SEM\s+PLANTAR"
         r"|[ÁA]REA|AREA|TOTAL\s*:|TOTAL|CARREADOR|STATUS|LOCALIZA[CÇ][AÃ]O|LEVANTAMENTO|DECLIV(?:\.|IDADE)?"
-        r"|ESCALA|ETAPA|DESENHO|TIPO|DIST[AÁ]NCIA|UNIDADE\s+GESTORA|LATITUDE|LONGITUDE"
+        r"|ESCALA|ETAPA|E\.\s*pa|DESENHO|TIPO|DIST[AÁ]NCIA|UNIDADE\s+GESTORA|LATITUDE|LONGITUDE"
         r"|MATR[IÍ]CULA|CCIR|SOLO|AMBIENTE|VAR\.\s*VEG|V\.\s*VEG|VEGETA[CÇ][AÃ]O"
         r")\b.*",
         re.I
@@ -10619,6 +10619,28 @@ def extrair_linhas_excel(documento):
             "talhoes": documento.get("talhoes") or [],
         }]
 
+    # Determina o ano da safra / documento (para preenchimento em talhões SEM PLANTAR)
+    anos_talhoes = []
+    for blk in blocos:
+        for t in (blk.get("talhoes") or []):
+            d_t = str(t.get("plantio") or t.get("data_plantio") or "")
+            m_a = re.search(r"\b(20[1-3]\d)\b", d_t)
+            if m_a:
+                anos_talhoes.append(m_a.group(1))
+
+    if anos_talhoes:
+        from collections import Counter
+        ano_doc = Counter(anos_talhoes).most_common(1)[0][0]
+    else:
+        texto_geral = str(metadata.get("status") or "") + " " + str(documento.get("texto_completo") or "")
+        m_s = re.search(r"(?:P[oó]s\s*Plantio|Safra)[\s:–-]+(?:20)?(\d{2,4})", texto_geral, re.I)
+        if m_s:
+            ano_val = m_s.group(1)
+            ano_doc = "20" + ano_val if len(ano_val) == 2 else ano_val
+        else:
+            m_a = re.search(r"\b\d{2}/\d{2}/(20[1-3]\d)\b", texto_geral)
+            ano_doc = m_a.group(1) if m_a else "2026"
+
     linhas = []
 
     for bloco in blocos:
@@ -10678,12 +10700,13 @@ def extrair_linhas_excel(documento):
             ):
                 continue
 
-            # Descarta linhas de topografia, metadados ou técnicos (ex: EVERTON / VANT, EZEQUIAS / VANT)
+            # Descarta linhas de topografia, metadados ou técnicos (ex: EVERTON / VANT, EZEQUIAS / VANT, TOTAL)
             if any(k in var_low or k in t_low for k in [
                 "bloco", "status", "mapa de", "levantamento", "desenho", "escala", "decliv",
                 "topografia", "gestora", "unidade gestora", "distancia", "distância", "ccir",
                 "matricula", "matrícula", "solo", "ambiente", "amanda", "stringhini",
-                "sirgas", "vant", "everton", "ezequias", "topografo", "responsavel"
+                "sirgas", "vant", "everton", "ezequias", "topografo", "responsavel",
+                "total", "soma", "subtotal", "área total", "area total"
             ]):
                 continue
 
@@ -10771,10 +10794,16 @@ def extrair_linhas_excel(documento):
             if not var_final and area_t and not plantio_t:
                 var_final = "SEM PLANTAR"
 
+            # Se for talhão sem plantio (SEM PLANTAR / SEM CULTURA), preenche com o ano da safra/documento
             if any(sp in var_final.upper() for sp in ["SEM PLANTAR", "SEM CULTURA"]):
-                plantio_t = ""
+                if not plantio_t or not re.search(r"\b20[1-3]\d\b", plantio_t):
+                    plantio_t = ano_doc
             elif plantio_t and not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|(?:19|20)\d{2})\b", plantio_t):
                 plantio_t = ""
+
+            # Descarta linhas fantasmas sem variedade e sem área
+            if not var_final and not area_t:
+                continue
 
             linhas.append({
                 "Bloco": str(
