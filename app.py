@@ -93,14 +93,18 @@ def criar_excel(linhas):
         "Município",
     ]
 
-    # Determina o ano padrão da safra/documento a partir dos plantios válidos do lote
+    # Determina a data e o ano padrão da safra/documento a partir dos plantios válidos do lote
+    datas_linhas = []
     anos_linhas = []
     for it in (linhas or []):
         if isinstance(it, dict):
-            p_val = str(it.get("Plantio") or it.get("plantio") or it.get("data_plantio") or "")
+            p_val = str(it.get("Plantio") or it.get("plantio") or it.get("data_plantio") or "").strip()
+            if re.match(r"^\d{1,2}/\d{1,2}/20[1-3]\d$", p_val):
+                datas_linhas.append(p_val)
             m_p = re.search(r"\b(20[1-3]\d)\b", p_val)
             if m_p:
                 anos_linhas.append(m_p.group(1))
+    data_padrao = Counter(datas_linhas).most_common(1)[0][0] if datas_linhas else ""
     ano_padrao = Counter(anos_linhas).most_common(1)[0][0] if anos_linhas else "2026"
 
     linhas_normalizadas = []
@@ -175,8 +179,12 @@ def criar_excel(linhas):
         if any(sp in variedade.upper() for sp in ["SEM PLANTAR", "SEM CULTURA"]):
             if not plantio or not re.search(r"\b20[1-3]\d\b", plantio):
                 plantio = ano_padrao
+        elif not plantio and data_padrao:
+            plantio = data_padrao
+        elif not plantio and ano_padrao:
+            plantio = ano_padrao
         elif plantio and not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|(?:19|20)\d{2})\b", plantio):
-            plantio = ""
+            plantio = data_padrao or ano_padrao or ""
 
         # Descarta linhas fantasmas sem variedade e sem área
         if not variedade and not area:

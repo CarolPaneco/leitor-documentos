@@ -10618,18 +10618,30 @@ def extrair_linhas_excel(documento):
             "bloco": bloco_doc,
             "talhoes": documento.get("talhoes") or [],
         }]
+    else:
+        total_talhoes_blocos = sum(len(b.get("talhoes") or []) for b in blocos)
+        doc_talhoes = documento.get("talhoes") or []
+        if len(doc_talhoes) > total_talhoes_blocos and len(blocos) <= 1:
+            blocos = [{
+                "bloco": bloco_doc,
+                "talhoes": doc_talhoes,
+            }]
 
-    # Determina o ano da safra / documento (para preenchimento em talhões SEM PLANTAR)
+    # Determina a data e o ano da safra / documento
+    from collections import Counter
+    datas_talhoes = []
     anos_talhoes = []
     for blk in blocos:
         for t in (blk.get("talhoes") or []):
-            d_t = str(t.get("plantio") or t.get("data_plantio") or "")
+            d_t = str(t.get("plantio") or t.get("data_plantio") or "").strip()
+            if re.match(r"^\d{1,2}/\d{1,2}/20[1-3]\d$", d_t):
+                datas_talhoes.append(d_t)
             m_a = re.search(r"\b(20[1-3]\d)\b", d_t)
             if m_a:
                 anos_talhoes.append(m_a.group(1))
 
+    data_doc_dominante = Counter(datas_talhoes).most_common(1)[0][0] if datas_talhoes else ""
     if anos_talhoes:
-        from collections import Counter
         ano_doc = Counter(anos_talhoes).most_common(1)[0][0]
     else:
         texto_geral = str(metadata.get("status") or "") + " " + str(documento.get("texto_completo") or "")
@@ -10798,8 +10810,12 @@ def extrair_linhas_excel(documento):
             if any(sp in var_final.upper() for sp in ["SEM PLANTAR", "SEM CULTURA"]):
                 if not plantio_t or not re.search(r"\b20[1-3]\d\b", plantio_t):
                     plantio_t = ano_doc
+            elif not plantio_t and data_doc_dominante:
+                plantio_t = data_doc_dominante
+            elif not plantio_t and ano_doc:
+                plantio_t = ano_doc
             elif plantio_t and not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|(?:19|20)\d{2})\b", plantio_t):
-                plantio_t = ""
+                plantio_t = data_doc_dominante or ano_doc or ""
 
             # Descarta linhas fantasmas sem variedade e sem área
             if not var_final and not area_t:
