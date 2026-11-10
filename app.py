@@ -127,12 +127,22 @@ def criar_excel(linhas):
         if any(k in var_low or k in t_low for k in [
             "total", "subtotal", "sub-total", "resumo", "vant", "everton", "ezequias",
             "topografo", "piloto", "responsavel", "unidade gestora", "desenho", "escala",
-            "soma", "área total", "area total"
-        ]):
+            "soma", "área total", "area total",
+            "ha ou", "alc", "alq", "alqueire", "alqueires", "área de cana", "area de cana",
+            "área de carreador", "area de carreador", "cana:"
+        ]) or re.search(r"\b(?:ha\s+ou|alq|alc|alqueires?)\b", var_low):
             continue
 
         propriedade = limpar_nome_propriedade(propriedade)
         proprietario = limpar_nome_proprietario(proprietario)
+
+        if propriedade and proprietario:
+            prop_core = re.sub(r"^(?:Fazenda|S[ií]tio|Est[aâ]ncia|Ch[aá]cara|Gleba|Rancho)\s+", "", propriedade, flags=re.I).strip()
+            if prop_core and len(prop_core) >= 3 and prop_core.lower() in proprietario.lower():
+                p_rest = re.sub(rf"\b{re.escape(prop_core)}\b", "", proprietario, flags=re.I).strip(" |:;,-")
+                if len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", p_rest)) >= 1:
+                    proprietario = p_rest
+
         municipio = _v19_normalizar_municipio_valor(municipio)
 
         # Recombina variedade se dividida pelo OCR (ex: 'CTC' + '90,03' -> 'CTC 9003')

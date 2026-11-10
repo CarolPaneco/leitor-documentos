@@ -7561,6 +7561,10 @@ def sanitizar_variedade(var, proprietario="", propriedade=""):
     if not v:
         return "", proprietario, propriedade
 
+    v_low = v.lower()
+    if any(ign in v_low for ign in ["ha ou", "alc", "alq", "alqueire", "alqueires", "área de cana", "area de cana", "área total", "area total", "carreador", "cana:"]) or re.search(r"\b(?:ha\s+ou|alq|alc|alqueires?)\b", v_low):
+        return "", proprietario, propriedade
+
     v = re.sub(r"\bR855156\b", "RB855156", v)
     v = re.sub(r"\bR8(\d{5,6})\b", lambda m: ("RB" + m.group(1)) if len(m.group(1)) == 6 else ("RB8" + m.group(1)), v)
 
@@ -7789,7 +7793,7 @@ def _v16_recuperar_metadados(words):
     # PROPRIEDADE (encontrar rótulo antes para delimitar proprietário)
     # ------------------------------------------------------------
     rotulo_propriedade = procurar_rotulo(
-        lambda k: any(x in k for x in ["propriedade", "propriedad", "propriadade", "ropriedade", "opriedade", "propried", "imovel", "imóvel", "fazenda", "sitio", "estancia"])
+        lambda k: any(x in k for x in ["propriedade", "propriedad", "propriadade", "ropriedade", "opriedade", "propried", "imovel", "imóvel"])
     )
 
     # ------------------------------------------------------------
@@ -7878,7 +7882,9 @@ def _v16_recuperar_metadados(words):
                     prev_t = normalizar(_word_text(prev)).strip(" |:;,-")
                     prev_x2 = _word_x2_loc(prev)
                     if _word_x(w) < prev_x2 - 10 or t.lower() in prev_t.lower() or prev_t.lower().endswith(t.lower()):
-                        if float(w.get("confianca", 0) or 0) > float(prev.get("confianca", 0) or 0) or len(t) > len(prev_t):
+                        if len(t) > len(prev_t):
+                            desdup_l[-1] = w
+                        elif len(t) == len(prev_t) and float(w.get("confianca", 0) or 0) > float(prev.get("confianca", 0) or 0):
                             desdup_l[-1] = w
                     elif abs(_word_x(w) - _word_x(prev)) <= 15:
                         if float(w.get("confianca", 0) or 0) > float(prev.get("confianca", 0) or 0):
@@ -8496,6 +8502,12 @@ def _v18_extrair_tabelas_grade(caminho):
                 row_crop = crop[y1:y2, :]
                 row_txt = _pytesseract_v12.image_to_string(row_crop, config="--psm 6").strip()
 
+                t_low = t_txt.lower()
+                r_low = row_txt.lower()
+                if any(k in t_low for k in ["total", "subtotal", "sub-total", "soma", "resumo"]) or any(r_low.startswith(k) for k in ["total", "subtotal", "soma", "resumo"]):
+                    # Linha de Total encerra os talhões da tabela
+                    break
+
                 a_txt = ""
                 if col_area is not None and col_area < len(clustered_x) - 1:
                     cell_a = crop[y1:y2, clustered_x[col_area] : clustered_x[col_area + 1]]
@@ -8624,10 +8636,26 @@ def _v18_extrair_tabelas_grade(caminho):
                     continue
 
                 v_low = var_norm.strip().lower()
-                if v_low in {"total", "subtotal", "sub-total", "resumo", "soma", "área total", "areatotal"} or "total" in v_low or "subtotal" in v_low or "resumo" in v_low or str(talhao_num).strip().lower() in {"total", "subtotal", "resumo"}:
+                if (
+                    v_low in {"total", "subtotal", "sub-total", "resumo", "soma", "área total", "areatotal"}
+                    or "total" in v_low
+                    or "subtotal" in v_low
+                    or "resumo" in v_low
+                    or str(talhao_num).strip().lower() in {"total", "subtotal", "resumo"}
+                ):
                     continue
 
-                if any(ign in v_low for ign in ["vant", "everton", "ezequias", "levantamento", "desenho", "escala", "decliv", "topografia", "gestora", "unidade gestora", "distancia", "distância", "ccir", "matricula", "matrícula", "solo", "ambiente", "amanda", "stringhini", "sirgas"]):
+                if any(
+                    ign in v_low
+                    for ign in [
+                        "ha ou", "alc", "alq", "alqueire", "alqueires", "área de", "area de",
+                        "área total", "area total", "cana:", "carreador", "localiza",
+                        "benfeitoria", "reserva", "app", "vant", "everton", "ezequias",
+                        "levantamento", "desenho", "escala", "decliv", "topografia",
+                        "gestora", "unidade gestora", "distancia", "distância", "ccir",
+                        "matricula", "matrícula", "solo", "ambiente", "amanda", "stringhini", "sirgas"
+                    ]
+                ) or re.search(r"\b(?:ha\s+ou|alq|alc|alqueires?)\b", v_low):
                     continue
 
                 rec_item = {
@@ -10050,10 +10078,9 @@ def _v17_recuperar_metadados_final(processed):
         or []
     )
 
-    for page in paginas:
-        md = _v16_recuperar_metadados(
-            _page_words(page)
-        )
+    for page_index, page in enumerate(paginas):
+        words = _page_words(page)
+        md = _v16_recuperar_metadados(words)
 
         for campo in campos:
             valor = str(
@@ -10063,6 +10090,43 @@ def _v17_recuperar_metadados_final(processed):
 
             if valor and not campos[campo]:
                 campos[campo] = valor
+
+        pasta = processed.get("pasta_saida", "")
+        caminho_img = _os_v12.path.join(pasta, f"pagina_{page_index + 1:03d}.png")
+        if _os_v12.path.exists(caminho_img) and words:
+            rotulos_ancora = [
+                w for w in words
+                if any(k in _key(_word_text(w)) for k in ["propriedade", "proprietario", "municipio", "bloco"])
+            ]
+            if rotulos_ancora:
+                img_p = _cv2_v12.imread(caminho_img)
+                if img_p is not None:
+                    h_p, w_p = img_p.shape[:2]
+                    ay = int(_cy(rotulos_ancora[-1]))
+                    ax = int(_word_x(rotulos_ancora[-1]))
+                    crop_meta = img_p[max(0, ay - 240) : min(h_p, ay + 140), max(0, ax - 60) : min(w_p, ax + 650)]
+                    if crop_meta.size > 0:
+                        txt_meta = _pytesseract_v12.image_to_string(crop_meta, lang="por+eng", config="--psm 6")
+                        m_proprio = re.search(r"Propriet[aá]rio:?\s*([^\n\r]+)", txt_meta, re.I)
+                        if m_proprio:
+                            c_proprio = limpar_nome_proprietario(m_proprio.group(1))
+                            if c_proprio and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", c_proprio)) >= 2:
+                                if not campos["proprietario"] or len(c_proprio) > len(campos["proprietario"]):
+                                    campos["proprietario"] = c_proprio
+                        m_prop = re.search(r"Propriedade:?\s*([^\n\r]+)", txt_meta, re.I)
+                        if m_prop:
+                            c_prop = limpar_nome_propriedade(m_prop.group(1))
+                            if c_prop and len(c_prop.split()) >= 1:
+                                if not campos["propriedade"] or len(c_prop) > len(campos["propriedade"]):
+                                    campos["propriedade"] = c_prop
+                        m_mun = re.search(r"Munic[ií]pio:?\s*([^\n\r]+)", txt_meta, re.I)
+                        if m_mun:
+                            c_mun = _v19_normalizar_municipio_valor(m_mun.group(1))
+                            if c_mun and not campos["municipio"]:
+                                campos["municipio"] = c_mun
+                        m_blo = re.search(r"\b(\d{2,3}[A-Z]\d{4})\b", txt_meta, re.I)
+                        if m_blo and (not campos["bloco"] or campos["bloco"].upper() == "STATUS"):
+                            campos["bloco"] = m_blo.group(1).upper()
 
     return campos 
 
@@ -10112,7 +10176,7 @@ def limpar_nome_propriedade(valor):
         # Corta ruídos residuais no final como 'VV SP a, 4' ou 'SP a, 4'
         v = re.sub(r"\s+(?:VV\s+SP|SP)\s+[a-z0-9]{1,2}\s*,\s*\d+.*$", "", v, flags=re.I).strip(" |:;,-")
         v = re.sub(r"\s+VV(?:\s+SP)?.*$", "", v, flags=re.I).strip(" |:;,-")
-        v = re.sub(r"\s+[A-Za-z]{1,2}(?:\s*\.\s*[A-Za-z]{1,2})*\s*$", "", v).strip(" |:;,-")
+        v = re.sub(r"\s+[A-Za-zÀ-ÿ]{1,2}(?:\s*\.\s*[A-Za-zÀ-ÿ]{1,2})*\s*$", "", v).strip(" |:;,-")
         # Remove pontuação residual no final
         v = re.sub(r"[^A-Za-z0-9À-ÿ)]+$", "", v).strip(" |:;,-")
         if v == v_ant:
@@ -10160,7 +10224,7 @@ def limpar_nome_proprietario(valor):
         # Corta símbolos de aspas/parênteses residuais (ex: '‘(ee', '’(al', '«(ee')
         v = re.sub(r"[\s|/]+[‘'\"«»(\[][^A-Za-z0-9À-ÿ\s]*[A-Za-z0-9À-ÿ]{0,3}[)\]»]*$", "", v).strip(" |:;,-")
         v = re.sub(r"[\s|/]+[^A-Za-z0-9À-ÿ\s/]+.*$", "", v).strip(" |:;,-")
-        m_sigla = re.search(r"\s+([A-Za-z]{1,2}(?:\s*\.\s*[A-Za-z]{1,2})*)\s*$", v)
+        m_sigla = re.search(r"\s+([A-Za-zÀ-ÿ]{1,2}(?:\s*\.\s*[A-Za-zÀ-ÿ]{1,2})*)\s*$", v)
         if m_sigla:
             sigla = m_sigla.group(1).replace(".", "").replace(" ", "").lower()
             if sigla not in {"me", "sa", "epp", "cia", "ltda"}:
@@ -10320,6 +10384,13 @@ def extrair_dados(processed):
 
     if md.get("proprietario"):
         md["proprietario"] = limpar_nome_proprietario(md["proprietario"])
+
+    if md.get("propriedade") and md.get("proprietario"):
+        prop_core = re.sub(r"^(?:Fazenda|S[ií]tio|Est[aâ]ncia|Ch[aá]cara|Gleba|Rancho)\s+", "", md["propriedade"], flags=re.I).strip()
+        if prop_core and len(prop_core) >= 3 and prop_core.lower() in md["proprietario"].lower():
+            p_rest = re.sub(rf"\b{re.escape(prop_core)}\b", "", md["proprietario"], flags=re.I).strip(" |:;,-")
+            if len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", p_rest)) >= 1:
+                md["proprietario"] = p_rest
 
     if md.get("municipio"):
         md["municipio"] = _v19_normalizar_municipio_valor(
@@ -10718,8 +10789,10 @@ def extrair_linhas_excel(documento):
                 "topografia", "gestora", "unidade gestora", "distancia", "distância", "ccir",
                 "matricula", "matrícula", "solo", "ambiente", "amanda", "stringhini",
                 "sirgas", "vant", "everton", "ezequias", "topografo", "responsavel",
-                "total", "soma", "subtotal", "área total", "area total"
-            ]):
+                "total", "soma", "subtotal", "área total", "area total",
+                "ha ou", "alc", "alq", "alqueire", "alqueires", "área de cana", "area de cana",
+                "área de carreador", "area de carreador", "cana:"
+            ]) or re.search(r"\b(?:ha\s+ou|alq|alc|alqueires?)\b", var_low):
                 continue
 
             area_t = str(talhao.get("area") or talhao.get("área") or "").strip()
@@ -10780,6 +10853,13 @@ def extrair_linhas_excel(documento):
                 or fn_meta.get("proprietario")
                 or ""
             ).strip())
+
+            if row_propriedade and row_proprietario:
+                prop_core = re.sub(r"^(?:Fazenda|S[ií]tio|Est[aâ]ncia|Ch[aá]cara|Gleba|Rancho)\s+", "", row_propriedade, flags=re.I).strip()
+                if prop_core and len(prop_core) >= 3 and prop_core.lower() in row_proprietario.lower():
+                    p_rest = re.sub(rf"\b{re.escape(prop_core)}\b", "", row_proprietario, flags=re.I).strip(" |:;,-")
+                    if len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", p_rest)) >= 1:
+                        row_proprietario = p_rest
 
             row_mun = str(
                 talhao.get("municipio")
