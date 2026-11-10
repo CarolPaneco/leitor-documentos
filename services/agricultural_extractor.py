@@ -8504,14 +8504,24 @@ def _v18_extrair_tabelas_grade(caminho):
 
                 t_low = t_txt.lower()
                 r_low = row_txt.lower()
-                if any(k in t_low for k in ["total", "subtotal", "sub-total", "soma", "resumo"]) or any(r_low.startswith(k) for k in ["total", "subtotal", "soma", "resumo"]):
-                    # Linha de Total encerra os talhões da tabela
+                if (
+                    any(k in t_low for k in ["total", "subtotal", "sub-total", "soma", "resumo"])
+                    or any(k in r_low for k in ["total", "subtotal", "sub-total", "soma", "resumo", "ha ou", "alc", "alq", "cana:"])
+                ):
+                    # Linha de Total ou resumo encerra os talhões da tabela
                     break
 
                 a_txt = ""
                 if col_area is not None and col_area < len(clustered_x) - 1:
                     cell_a = crop[y1:y2, clustered_x[col_area] : clustered_x[col_area + 1]]
-                    a_txt = _pytesseract_v12.image_to_string(cell_a, config="--psm 6").strip()
+                    ah, aw = cell_a.shape[:2]
+                    inner_a = cell_a[3:-3, 6:-6] if ah > 6 and aw > 12 else cell_a
+                    a_txt = _pytesseract_v12.image_to_string(inner_a, config="--psm 6").strip()
+                    if not _v17_normalizar_area_ocr(a_txt):
+                        a_txt = _pytesseract_v12.image_to_string(inner_a, config="--psm 7 -c tessedit_char_whitelist=0123456789,.").strip()
+                    if not _v17_normalizar_area_ocr(a_txt):
+                        a_txt = _pytesseract_v12.image_to_string(cell_a, config="--psm 6").strip()
+
                     area_cand = _v17_normalizar_area_ocr(a_txt)
                     
                     m_row_areas = re.findall(r"\b\d{1,3}[,\.]\d{1,2}\b", row_txt)
@@ -8537,13 +8547,13 @@ def _v18_extrair_tabelas_grade(caminho):
                 p_txt = ""
                 if col_plantio is not None and col_plantio < len(clustered_x) - 1:
                     cell_p = crop[y1:y2, clustered_x[col_plantio] : clustered_x[col_plantio + 1]]
-                    p_txt = _pytesseract_v12.image_to_string(cell_p, config="--psm 6").strip()
+                    ph, pw = cell_p.shape[:2]
+                    inner_p = cell_p[3:-3, 6:-6] if ph > 6 and pw > 12 else cell_p
+                    p_txt = _pytesseract_v12.image_to_string(inner_p, config="--psm 6").strip()
                     if not _v11_normalizar_data(p_txt):
-                        ph, pw = cell_p.shape[:2]
-                        inner_p = cell_p[2:-2, 4:-4] if ph > 6 and pw > 12 else cell_p
-                        p_txt_inner = _pytesseract_v12.image_to_string(inner_p, config="--psm 6").strip()
-                        if _v11_normalizar_data(p_txt_inner):
-                            p_txt = p_txt_inner
+                        p_txt_cell = _pytesseract_v12.image_to_string(cell_p, config="--psm 6").strip()
+                        if _v11_normalizar_data(p_txt_cell):
+                            p_txt = p_txt_cell
 
                 data_norm = _v11_normalizar_data(p_txt)
                 if not data_norm:
