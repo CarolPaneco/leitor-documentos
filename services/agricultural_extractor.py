@@ -10112,11 +10112,16 @@ def _v17_recuperar_metadados_final(processed):
                             if c_prop and len(c_prop.split()) >= 1:
                                 if not campos["propriedade"] or len(c_prop) > len(campos["propriedade"]):
                                     campos["propriedade"] = c_prop
-                        m_mun = re.search(r"Munic[ií]pio:?\s*([^\n\r]+)", txt_meta, re.I)
-                        if m_mun:
-                            c_mun = _v19_normalizar_municipio_valor(m_mun.group(1))
-                            if c_mun and not campos["municipio"]:
-                                campos["municipio"] = c_mun
+                        lines_m = [l.strip() for l in txt_meta.splitlines() if l.strip()]
+                        for l_idx, l_line in enumerate(lines_m):
+                            if re.search(r"Munic[ií]pio:?", l_line, re.I):
+                                after_m = re.sub(r".*?Munic[ií]pio:?", "", l_line, flags=re.I).strip(" |:;,-")
+                                cand_m = _v19_normalizar_municipio_valor(after_m)
+                                if not cand_m and l_idx + 1 < len(lines_m):
+                                    cand_m = _v19_normalizar_municipio_valor(lines_m[l_idx + 1])
+                                if cand_m and not campos["municipio"]:
+                                    campos["municipio"] = cand_m
+                                    break
                         m_blo = re.search(r"\b(\d{2,3}[A-Z]\d{4})\b", txt_meta, re.I)
                         if m_blo and (not campos["bloco"] or campos["bloco"].upper() == "STATUS"):
                             campos["bloco"] = m_blo.group(1).upper()
@@ -10235,13 +10240,16 @@ def _v19_normalizar_municipio_valor(valor):
     Corrige principalmente duplicações produzidas pelo OCR, como
     ``Guapiaçu cuapiaçu - SP``, mantendo a grafia mais completa.
     """
-    valor = " ".join(str(valor or "").split()).strip(" |:-")
-    if not valor:
+    valor = " ".join(str(valor or "").split()).strip(" |:;,-")
+    if not valor or len(valor) < 3:
         return ""
 
     # Rejeita metadados geodésicos ou carimbos/máscaras lidos erroneamente como município
     v_up = valor.upper()
     if any(k in v_up for k in ["SIRGAS", "SAD69", "WGS84", "UTM", "DATUM", "FUSO", "MERIDIANO", "XXXX"]):
+        return ""
+
+    if len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", valor)) < 1:
         return ""
 
     cidades_sp = {
@@ -10266,9 +10274,12 @@ def _v19_normalizar_municipio_valor(valor):
         "olímpia": "Olímpia",
     }
     v_norm = re.sub(r"\bPlaestina\b", "Palestina", valor, flags=re.I)
-    v_clean = " ".join(v_norm.split()).lower()
+    v_clean = " ".join(v_norm.split()).lower().strip(" |:;,-")
     if v_clean in cidades_sp:
         return f"{cidades_sp[v_clean]} - SP"
+    for c_key, c_name in cidades_sp.items():
+        if re.search(rf"\b{re.escape(c_key)}\b", v_clean):
+            return f"{c_name} - SP"
 
     valor = v_norm
 
@@ -10284,7 +10295,9 @@ def _v19_normalizar_municipio_valor(valor):
             re.I,
         )
     if not m:
-        return valor
+        if len(valor) >= 3 and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", valor)) >= 1:
+            return f"{valor} - SP"
+        return ""
 
     cidade = " ".join(m.group(1).split())
     cidade = re.sub(r"\bPlaestina\b", "Palestina", cidade, flags=re.I)
@@ -10483,7 +10496,7 @@ def extrair_dados(processed):
         }]
 
     # Fallback refinado via recorte direcionado de celula para municipio
-    if not resultado.get("metadata", {}).get("municipio"):
+    if not resultado.get("metadata", {}).get("municipio") or len(str(resultado.get("metadata", {}).get("municipio", "")).strip()) < 4 or not re.search(r"[A-Za-zÀ-ÿ]{3,}", str(resultado.get("metadata", {}).get("municipio", ""))):
         paginas = processed.get("paginas") or processed.get("pages") or []
         pasta = processed.get("pasta_saida", "")
         for page_index, page in enumerate(paginas):
