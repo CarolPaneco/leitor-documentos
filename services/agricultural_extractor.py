@@ -170,6 +170,7 @@ def _cy(word: Dict[str, Any]) -> float:
     return _word_y(word) + _word_h(word) / 2
 
 
+
 def _normalize_word(word: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "texto": _word_text(word),
@@ -9692,7 +9693,7 @@ def _v17_metadados_texto_limpo(processed):
             eh_multiplo = ("/" in prox_limpo and len(palavras) >= 4)
             tem_empresa = bool(re.search(r"\b(?:LTDA|S\.?A\.?|ME|EPP|EIRELI|INCORP|AGRO)\b", prox_limpo, re.I))
             eh_nome_valido = (len(palavras) >= 2 and not any(ign in prox_limpo.lower() for ign in ["matricula", "ccir", "distancia", "escala", "bloco", "fazenda", "sitio", "propriedade"]))
-            if eh_multiplo or (tem_empresa and eh_nome_valido) or (len(palavras) >= 3 and eh_nome_valido):
+            if eh_multiplo or (tem_empresa and eh_nome_valido) or (len(palavras) >= 2 and eh_nome_valido):
                 candidato = prox_limpo.strip(" |:-")
                 candidato = re.sub(
                     r"\s+[A-Z]{2}\s*:?$",
@@ -10100,19 +10101,31 @@ def _v17_recuperar_metadados_final(processed):
                     crop_meta = img_p[max(0, ay - 240) : min(h_p, ay + 140), max(0, ax - 60) : min(w_p, ax + 650)]
                     if crop_meta.size > 0:
                         txt_meta = _pytesseract_v12.image_to_string(crop_meta, lang="por+eng", config="--psm 6")
-                        m_proprio = re.search(r"Propriet[aá]rio:?\s*([^\n\r]+)", txt_meta, re.I)
-                        if m_proprio:
-                            c_proprio = limpar_nome_proprietario(m_proprio.group(1))
-                            if c_proprio and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", c_proprio)) >= 2:
-                                if not campos["proprietario"] or len(c_proprio) > len(campos["proprietario"]):
-                                    campos["proprietario"] = c_proprio
-                        m_prop = re.search(r"Propriedade:?\s*([^\n\r]+)", txt_meta, re.I)
-                        if m_prop:
-                            c_prop = limpar_nome_propriedade(m_prop.group(1))
-                            if c_prop and len(c_prop.split()) >= 1:
-                                if not campos["propriedade"] or len(c_prop) > len(campos["propriedade"]):
-                                    campos["propriedade"] = c_prop
                         lines_m = [l.strip() for l in txt_meta.splitlines() if l.strip()]
+                        for l_idx, l_line in enumerate(lines_m):
+                            if re.search(r"(?:Propriet[aá]rio|Arrendat[aá]rio):?", l_line, re.I):
+                                after_p = re.sub(r".*?(?:Propriet[aá]rio|Arrendat[aá]rio):?", "", l_line, flags=re.I).strip(" |:;,-")
+                                cand_p = limpar_nome_proprietario(after_p)
+                                if (not cand_p or len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", cand_p)) < 2) and l_idx + 1 < len(lines_m):
+                                    cand_p_prox = limpar_nome_proprietario(lines_m[l_idx + 1])
+                                    if cand_p_prox and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", cand_p_prox)) >= 2:
+                                        cand_p = cand_p_prox
+                                if cand_p and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", cand_p)) >= 2:
+                                    if not campos["proprietario"] or len(cand_p) > len(campos["proprietario"]):
+                                        campos["proprietario"] = cand_p
+                                        break
+                        for l_idx, l_line in enumerate(lines_m):
+                            if re.search(r"Propriedade:?", l_line, re.I):
+                                after_pr = re.sub(r".*?Propriedade:?", "", l_line, flags=re.I).strip(" |:;,-")
+                                cand_pr = limpar_nome_propriedade(after_pr)
+                                if (not cand_pr or len(cand_pr.split()) < 1) and l_idx + 1 < len(lines_m):
+                                    cand_pr_prox = limpar_nome_propriedade(lines_m[l_idx + 1])
+                                    if cand_pr_prox and len(cand_pr_prox.split()) >= 1:
+                                        cand_pr = cand_pr_prox
+                                if cand_pr and len(cand_pr.split()) >= 1:
+                                    if not campos["propriedade"] or len(cand_pr) > len(campos["propriedade"]):
+                                        campos["propriedade"] = cand_pr
+                                        break
                         for l_idx, l_line in enumerate(lines_m):
                             if re.search(r"Munic[ií]pio:?", l_line, re.I):
                                 after_m = re.sub(r".*?Munic[ií]pio:?", "", l_line, flags=re.I).strip(" |:;,-")
@@ -10144,6 +10157,10 @@ def limpar_nome_propriedade(valor):
     if re.fullmatch(r"[\d\s.,:/-]+", v) or (v.isdigit() and len(v) >= 4):
         return ""
     
+    # 0. Remove vazamento de colunas vizinhas no início (ex: 'Levantamento:', 'L -', 'L: ')
+    v = re.sub(r"^(?:L|Levantamento|Localiza[cç][aã]o)\b[\s:.-]*", "", v, flags=re.I).strip()
+    v = re.sub(r"^[A-Za-z]\s*[-–|:]\s*", "", v).strip()
+
     # 1. Corta qualquer menção a colunas vizinhas (ÁREA TOTAL, CARREADOR, STATUS, etc.)
     padrao_corte = re.compile(
         r"(?:[\s|/]+|^)"
@@ -10183,6 +10200,15 @@ def limpar_nome_propriedade(valor):
     # De-duplica palavras repetidas adjacentes produzidas pelo OCR (ex: 'ESPERANCA ESPERANCA' -> 'ESPERANCA')
     v = re.sub(r"\b([A-Za-zÀ-ÿ]{3,})\s+\1\b", r"\1", v, flags=re.I)
 
+    # Invalida propriedades que sejam apenas ruído ou siglas isoladas
+    if len(v) < 3:
+        return ""
+    if v.upper() in {"L", "SP", "STATUS", "AREA", "CARREADOR", "LEVANTAMENTO", "LOCALIZACAO", "LOCALIZAÇÃO", "DESENHO", "ESCALA", "DECLIV", "TOTAL"}:
+        return ""
+    palavras = re.findall(r"[A-Za-zÀ-ÿ]{2,}", v)
+    if len(palavras) < 1:
+        return ""
+
     return v
 
 def limpar_nome_proprietario(valor):
@@ -10195,7 +10221,9 @@ def limpar_nome_proprietario(valor):
     v = re.sub(r"^[^A-Za-zÀ-ÿ]+", "", v).strip()
     v = re.sub(r"\b[xX]{2,}\b|\b[xX\)\(]{3,}\b", "", v).strip(" |:;,-•·~_*()[]{}\x22\x27\u201c\u201d\u2018\u2019")
     
-    # 0. Remove prefixos de cabeçalho fragmentados pelo OCR
+    # 0. Remove prefixos de cabeçalho fragmentados pelo OCR ou vazamentos de colunas vizinhas
+    v = re.sub(r"^(?:L|Levantamento|Localiza[cç][aã]o)\b[\s:.-]*", "", v, flags=re.I).strip()
+    v = re.sub(r"^[A-Za-z]\s*[-–|:]\s*", "", v).strip()
     v = re.sub(
         r"^(?:(?:prop)?riet[aá]rio|(?:prop)?iet[aá]rio|(?:prop)?jet[aá]rio|et[aá]rio|arrendat[aá]rio|propriedade)\b[\s:.-]*",
         "",
@@ -10231,6 +10259,17 @@ def limpar_nome_proprietario(valor):
         if v == v_ant:
             break
         
+    v = re.sub(r"[\s|:-]+[A-Za-z]$", "", v).strip(" |:;,-")
+    if len(v) < 3:
+        return ""
+    if v.upper() in {"L", "SP", "STATUS", "AREA", "CARREADOR", "LEVANTAMENTO", "LOCALIZACAO", "LOCALIZAÇÃO", "DESENHO", "ESCALA", "DECLIV", "TOTAL"}:
+        return ""
+    palavras = re.findall(r"[A-Za-zÀ-ÿ]{2,}", v)
+    if len(palavras) < 1:
+        return ""
+    if len(palavras) == 1 and palavras[0].upper() in {"L", "VANT", "TOPOGRAFIA", "RESPONSAVEL", "ENGENHARIA"}:
+        return ""
+
     return v
 
 
@@ -10530,7 +10569,14 @@ def extrair_dados(processed):
                     break
 
     # Fallback refinado via recorte direcionado de celula para proprietario
-    if not resultado.get("metadata", {}).get("proprietario") or "cem cana" in str(resultado.get("metadata", {}).get("proprietario", "")).lower():
+    p_atual = str(resultado.get("metadata", {}).get("proprietario", "")).strip()
+    if (
+        not p_atual
+        or len(p_atual) < 4
+        or len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", p_atual)) < 2
+        or p_atual.upper() in ["L", "SP", "STATUS", "AREA", "CARREADOR", "LEVANTAMENTO"]
+        or "cem cana" in p_atual.lower()
+    ):
         paginas = processed.get("paginas") or processed.get("pages") or []
         pasta = processed.get("pasta_saida", "")
         for page_index, page in enumerate(paginas):
@@ -10546,22 +10592,24 @@ def extrair_dados(processed):
             if img_p is None:
                 continue
 
-            if rot_propriedade:
+            if rot_prop:
+                rot = max(rot_prop, key=_cy)
+                ax = int(_word_x(rot))
+                ay = int(_cy(rot))
+                y1 = max(0, ay - 12)
+                y2 = min(img_p.shape[0], ay + 65)
+                x1 = max(0, ax - 10)
+                x2 = min(img_p.shape[1], ax + 650)
+            elif rot_propriedade:
                 rot = max(rot_propriedade, key=_cy)
                 ax = int(_word_x(rot))
                 ay = int(_cy(rot))
                 y1 = max(0, ay - 68)
                 y2 = min(img_p.shape[0], ay - 6)
                 x1 = max(0, ax - 10)
-                x2 = min(img_p.shape[1], ax + 600)
+                x2 = min(img_p.shape[1], ax + 650)
             else:
-                rot = max(rot_prop, key=_cy)
-                ax = int(_word_x(rot))
-                ay = int(_cy(rot))
-                y1 = max(0, ay - 8)
-                y2 = min(img_p.shape[0], ay + 55)
-                x1 = max(0, ax - 10)
-                x2 = min(img_p.shape[1], ax + 600)
+                continue
 
             cell_crop = img_p[y1:y2, x1:x2]
             if cell_crop.size > 0:
@@ -10569,25 +10617,37 @@ def extrair_dados(processed):
                 linhas_c = [l.strip() for l in txt_cell.splitlines() if l.strip()]
                 cand_p = ""
                 for l in linhas_c:
-                    if ":" in l:
-                        after = l.split(":", 1)[1].strip()
-                        if len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", after)) >= 1:
-                            cand_p = after
+                    if re.search(r"(?:propriet[aá]rio|arrendat[aá]rio):?", l, re.I):
+                        after = re.sub(r".*?(?:propriet[aá]rio|arrendat[aá]rio):?", "", l, flags=re.I).strip()
+                        c_after = limpar_nome_proprietario(after)
+                        if c_after and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", c_after)) >= 2:
+                            cand_p = c_after
                             break
-                    elif not any(k in _key(l) for k in ["proprietario", "roprietario", "propristario", "arrendatario", "propriedade", "agrupamento"]):
-                        if len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", l)) >= 1:
-                            cand_p = l
+                    elif ":" in l:
+                        label_before = l.split(":", 1)[0].lower()
+                        if not any(k in label_before for k in ["levantamento", "localiza", "status", "area", "área", "escala", "desenho", "decliv", "munic", "propriedade"]):
+                            c_after = limpar_nome_proprietario(l.split(":", 1)[1])
+                            if c_after and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", c_after)) >= 2:
+                                cand_p = c_after
+                                break
+                    elif not any(k in _key(l) for k in ["proprietario", "roprietario", "propristario", "arrendatario", "propriedade", "agrupamento", "levantamento", "status", "area"]):
+                        c_l = limpar_nome_proprietario(l)
+                        if c_l and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", c_l)) >= 2:
+                            cand_p = c_l
                             break
-                cand_p = re.split(r"\b(?:[ÁA]rea|Carreador|Status|\d+,\d+%)\b", cand_p, flags=re.I)[0].strip(" |:;,-")
-                cand_p = re.sub(r"^[^A-Za-zÀ-ÿ0-9]+", "", cand_p).strip()
-                if re.match(r"^CEM\b", cand_p, re.I) and "cana" in cand_p.lower():
-                    cand_p = re.sub(r"^CEM\b", "CFM", cand_p, flags=re.I)
-                if cand_p and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", cand_p)) >= 1:
+
+                if not cand_p:
+                    for l in linhas_c:
+                        c_l = limpar_nome_proprietario(l)
+                        if c_l and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", c_l)) >= 1 and len(c_l) >= 4:
+                            cand_p = c_l
+                            break
+
+                if cand_p:
                     resultado["metadata"]["proprietario"] = cand_p
                     resultado["proprietario"] = cand_p
                     for b in resultado.get("blocos") or []:
-                        if not b.get("proprietario"):
-                            b["proprietario"] = cand_p
+                        b["proprietario"] = cand_p
                     break
 
     if resultado.get("metadata", {}).get("propriedade"):
@@ -10741,25 +10801,27 @@ def extrair_linhas_excel(documento):
             or ""
         ).strip()
 
-        bloco_prop = str(
-            bloco.get("propriedade")
-            or propriedade
-            or fn_meta.get("propriedade")
-        ).strip()
+        bloco_prop = limpar_nome_propriedade(str(
+            bloco.get("propriedade") or ""
+        ).strip())
+        if not bloco_prop:
+            bloco_prop = propriedade or limpar_nome_propriedade(fn_meta.get("propriedade", ""))
 
-        bloco_proprio = str(
+        bloco_proprio = limpar_nome_proprietario(str(
             bloco.get("proprietario")
             or bloco.get("proprietário")
-            or proprietario
-            or fn_meta.get("proprietario")
-        ).strip()
+            or ""
+        ).strip())
+        if not bloco_proprio:
+            bloco_proprio = proprietario or limpar_nome_proprietario(fn_meta.get("proprietario", ""))
 
-        bloco_mun = str(
+        bloco_mun = _v19_normalizar_municipio_valor(str(
             bloco.get("municipio")
             or bloco.get("município")
-            or municipio
-            or fn_meta.get("municipio")
-        ).strip()
+            or ""
+        ).strip())
+        if not bloco_mun:
+            bloco_mun = municipio or _v19_normalizar_municipio_valor(fn_meta.get("municipio", ""))
 
         vistos = set()
         for talhao in (bloco.get("talhoes") or []):
@@ -10846,35 +10908,34 @@ def extrair_linhas_excel(documento):
             vistos.add(chave)
 
             row_propriedade = limpar_nome_propriedade(str(
-                talhao.get("propriedade")
-                or bloco_prop
-                or fn_meta.get("propriedade")
-                or ""
+                talhao.get("propriedade") or ""
             ).strip())
+            if not row_propriedade:
+                row_propriedade = bloco_prop or propriedade or limpar_nome_propriedade(fn_meta.get("propriedade", ""))
 
             row_proprietario = limpar_nome_proprietario(str(
                 talhao.get("proprietario")
                 or talhao.get("proprietário")
-                or bloco_proprio
-                or fn_meta.get("proprietario")
                 or ""
             ).strip())
+            if not row_proprietario:
+                row_proprietario = bloco_proprio or proprietario or limpar_nome_proprietario(fn_meta.get("proprietario", ""))
 
             if row_propriedade and row_proprietario:
                 prop_core = re.sub(r"^(?:Fazenda|S[ií]tio|Est[aâ]ncia|Ch[aá]cara|Gleba|Rancho)\s+", "", row_propriedade, flags=re.I).strip()
                 if prop_core and len(prop_core) >= 3 and prop_core.lower() in row_proprietario.lower():
                     p_rest = re.sub(rf"\b{re.escape(prop_core)}\b", "", row_proprietario, flags=re.I).strip(" |:;,-")
-                    if len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", p_rest)) >= 1:
-                        row_proprietario = p_rest
+                    p_rest_clean = limpar_nome_proprietario(p_rest)
+                    if p_rest_clean and len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", p_rest_clean)) >= 1:
+                        row_proprietario = p_rest_clean
 
-            row_mun = str(
+            row_mun = _v19_normalizar_municipio_valor(str(
                 talhao.get("municipio")
                 or talhao.get("município")
-                or bloco_mun
-                or fn_meta.get("municipio")
                 or ""
-            ).strip()
-            row_mun = _v19_normalizar_municipio_valor(row_mun)
+            ).strip())
+            if not row_mun:
+                row_mun = bloco_mun or municipio or _v19_normalizar_municipio_valor(fn_meta.get("municipio", ""))
 
             # Corrige vazamento de proprietário para variedade
             var_final, row_pr, row_p = sanitizar_variedade(var_t, row_proprietario, row_propriedade)
