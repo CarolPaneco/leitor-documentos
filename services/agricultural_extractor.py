@@ -8296,17 +8296,8 @@ def _v18_extrair_tabelas_grade(caminho):
         if bw_box > 250 and bh_box > 80 and bw_box < w_img * 0.70 and bh_box < h_img * 0.70 and (bw_box * bh_box) < (w_img * h_img * 0.35):
             tabelas_originais.append((bx, by, bw_box, bh_box))
 
-    # Verifica quais tabelas originais contêm cabeçalho com talhão
-    tabelas_com_talhao = []
-    outras_originais = []
-    for b in tabelas_originais:
-        bx, by, bw_b, bh_b = b
-        crop_h = img[by : by + min(60, bh_b), bx : bx + bw_b]
-        txt_h = _pytesseract_v12.image_to_string(crop_h, lang="por+eng", config="--psm 6").lower()
-        if "talh" in txt_h:
-            tabelas_com_talhao.append(b)
-        else:
-            outras_originais.append(b)
+    # Prioridade para as tabelas com contorno original detectado pelo OpenCV
+    tabelas_candidatas = list(tabelas_originais)
 
     cell_boxes = []
     for c in cnts:
@@ -8327,14 +8318,11 @@ def _v18_extrair_tabelas_grade(caminho):
             if tbw > 250 and tbh > 80 and tbw < w_img * 0.70 and tbh < h_img * 0.70 and (tbw * tbh) < (w_img * h_img * 0.35):
                 tabelas_dilatadas.append((tbx, tby, tbw, tbh))
 
-    # Prioridade ABSOLUTA para tabelas_com_talhao originais!
-    tabelas_candidatas = list(tabelas_com_talhao)
-
-    # Adiciona tabelas dilatadas apenas se não sobrepuserem tabelas_com_talhao
+    # Adiciona tabelas dilatadas apenas se não sobrepuserem nenhuma tabela original
     for db in tabelas_dilatadas:
         dbx, dby, dbw, dbh = db
         sobrepos = False
-        for tb in tabelas_com_talhao:
+        for tb in tabelas_originais:
             ix1 = max(dbx, tb[0])
             iy1 = max(dby, tb[1])
             ix2 = min(dbx + dbw, tb[0] + tb[2])
@@ -8346,23 +8334,6 @@ def _v18_extrair_tabelas_grade(caminho):
                     break
         if not sobrepos:
             tabelas_candidatas.append(db)
-
-    # Adiciona outras originais se não sobrepuserem
-    for ob in outras_originais:
-        obx, oby, obw, obh = ob
-        sobrepos = False
-        for cb in tabelas_candidatas:
-            ix1 = max(obx, cb[0])
-            iy1 = max(oby, cb[1])
-            ix2 = min(obx + obw, cb[0] + cb[2])
-            iy2 = min(oby + obh, cb[1] + cb[3])
-            if ix2 > ix1 and iy2 > iy1:
-                inter = (ix2 - ix1) * (iy2 - iy1)
-                if inter / (obw * obh) > 0.20 or inter / (cb[2] * cb[3]) > 0.20:
-                    sobrepos = True
-                    break
-        if not sobrepos:
-            tabelas_candidatas.append(ob)
 
     tabelas_encontradas = sorted(tabelas_candidatas, key=lambda b: (b[1], b[0]))
     todos_registros = []
@@ -8404,12 +8375,12 @@ def _v18_extrair_tabelas_grade(caminho):
 
         header_row = crop[clustered_y[0] : clustered_y[1], :]
         h_txt = _pytesseract_v12.image_to_string(header_row, lang="por+eng", config="--psm 6").lower()
-        if "talh" not in h_txt:
+        if not any(k in h_txt for k in ["talh", "taiha", "taln", "tath"]):
             cell_header_txt = " ".join(
                 _pytesseract_v12.image_to_string(crop[clustered_y[0] : clustered_y[1], clustered_x[c]:clustered_x[c+1]], lang="por+eng", config="--psm 6").lower()
                 for c in range(min(4, len(clustered_x)-1))
             )
-            if "talh" in cell_header_txt:
+            if any(k in cell_header_txt for k in ["talh", "taiha", "taln", "tath"]):
                 h_txt = cell_header_txt
             else:
                 continue
@@ -8598,11 +8569,12 @@ def _v18_extrair_tabelas_grade(caminho):
                         sub_comb = comb[:, 3:-3] if comb.shape[1] > 6 else comb
                         cands = []
                         for c_img in [sub_comb, comb]:
-                            txt_c = _pytesseract_v12.image_to_string(
-                                c_img, config="--psm 6 -c tessedit_char_whitelist=0123456789"
-                            ).strip()
-                            if txt_c and txt_c.isdigit() and int(txt_c) < 1000:
-                                cands.append(txt_c)
+                            for psm_m in ["--psm 6", "--psm 7"]:
+                                txt_c = _pytesseract_v12.image_to_string(
+                                    c_img, config=f"{psm_m} -c tessedit_char_whitelist=0123456789"
+                                ).strip()
+                                if txt_c and txt_c.isdigit() and int(txt_c) < 1000:
+                                    cands.append(txt_c)
                             txt_c_raw = _pytesseract_v12.image_to_string(c_img, config="--psm 6").strip()
                             m_comb = re.search(r"\b\d{1,4}\b", txt_c_raw)
                             if m_comb and int(m_comb.group(0)) < 1000:
@@ -8620,6 +8592,17 @@ def _v18_extrair_tabelas_grade(caminho):
                             carry_talhao = talhao_num
                     if not talhao_num and registros_sub and registros_sub[-1].get("talhao"):
                         talhao_num = registros_sub[-1]["talhao"]
+
+                if talhao_num and registros_sub and talhao_num == registros_sub[-1].get("talhao"):
+                    # Se o talhão lido for idêntico ao anterior mas a célula combinada com a próxima indicar a sequência esperada
+                    if r + 2 < len(clustered_y):
+                        comb = crop[y1 : clustered_y[r + 2], clustered_x[col_talhao] : clustered_x[col_talhao + 1]]
+                        sub_comb = comb[:, 3:-3] if comb.shape[1] > 6 else comb
+                        txt_c = _pytesseract_v12.image_to_string(sub_comb, config="--psm 7 -c tessedit_char_whitelist=0123456789").strip()
+                        prev_val = int(registros_sub[-1]["talhao"]) if registros_sub[-1]["talhao"].isdigit() else None
+                        if prev_val is not None and txt_c and txt_c.isdigit() and int(txt_c) == prev_val + 1:
+                            talhao_num = txt_c
+                            carry_talhao = talhao_num
 
                 proprio_txt = ""
                 if col_proprio is not None and col_proprio < len(clustered_x) - 1:
