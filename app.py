@@ -185,16 +185,14 @@ def criar_excel(linhas):
         if not variedade and area and not plantio:
             variedade = "SEM PLANTAR"
 
-        # Preenche com ano da safra/documento se for SEM PLANTAR conforme preferência do usuário
+        # Se for talhão sem plantio (SEM PLANTAR / SEM CULTURA), deixa em branco se não houver data explícita no documento
         if any(sp in variedade.upper() for sp in ["SEM PLANTAR", "SEM CULTURA"]):
-            if not plantio or not re.search(r"\b20[1-3]\d\b", plantio):
-                plantio = ano_padrao
+            if not plantio or not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|20[1-3]\d)\b", plantio):
+                plantio = ""
         elif not plantio and data_padrao:
             plantio = data_padrao
-        elif not plantio and ano_padrao:
-            plantio = ano_padrao
         elif plantio and not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|(?:19|20)\d{2})\b", plantio):
-            plantio = data_padrao or ano_padrao or ""
+            plantio = data_padrao or ""
 
         # Descarta linhas fantasmas sem variedade e sem área
         if not variedade and not area:

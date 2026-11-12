@@ -10953,16 +10953,14 @@ def extrair_linhas_excel(documento):
             if not var_final and area_t and not plantio_t:
                 var_final = "SEM PLANTAR"
 
-            # Se for talhão sem plantio (SEM PLANTAR / SEM CULTURA), preenche com o ano da safra/documento
+            # Se for talhão sem plantio (SEM PLANTAR / SEM CULTURA), deixa em branco se não houver data explícita no documento
             if any(sp in var_final.upper() for sp in ["SEM PLANTAR", "SEM CULTURA"]):
-                if not plantio_t or not re.search(r"\b20[1-3]\d\b", plantio_t):
-                    plantio_t = ano_doc
+                if not plantio_t or not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|20[1-3]\d)\b", plantio_t):
+                    plantio_t = ""
             elif not plantio_t and data_doc_dominante:
                 plantio_t = data_doc_dominante
-            elif not plantio_t and ano_doc:
-                plantio_t = ano_doc
             elif plantio_t and not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|(?:19|20)\d{2})\b", plantio_t):
-                plantio_t = data_doc_dominante or ano_doc or ""
+                plantio_t = data_doc_dominante or ""
 
             # Descarta linhas fantasmas sem variedade e sem área
             if not var_final and not area_t:
