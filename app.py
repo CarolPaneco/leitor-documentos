@@ -93,20 +93,6 @@ def criar_excel(linhas):
         "Município",
     ]
 
-    # Determina a data e o ano padrão da safra/documento a partir dos plantios válidos do lote
-    datas_linhas = []
-    anos_linhas = []
-    for it in (linhas or []):
-        if isinstance(it, dict):
-            p_val = str(it.get("Plantio") or it.get("plantio") or it.get("data_plantio") or "").strip()
-            if re.match(r"^\d{1,2}/\d{1,2}/20[1-3]\d$", p_val):
-                datas_linhas.append(p_val)
-            m_p = re.search(r"\b(20[1-3]\d)\b", p_val)
-            if m_p:
-                anos_linhas.append(m_p.group(1))
-    data_padrao = Counter(datas_linhas).most_common(1)[0][0] if datas_linhas else ""
-    ano_padrao = Counter(anos_linhas).most_common(1)[0][0] if anos_linhas else "2026"
-
     linhas_normalizadas = []
     for item in (linhas or []):
         if not isinstance(item, dict):
@@ -164,6 +150,12 @@ def criar_excel(linhas):
                 else:
                     area = f"{area},00"
 
+        # Limpa traços ou marcadores de vazio no plantio (ex: "-", "--", "—")
+        if plantio:
+            p_clean = plantio.strip(" |:;,-•·~_–—")
+            if not p_clean or p_clean.lower() in {"none", "null", "n/a", "na", "s/d", "sem data", "sem plantio"}:
+                plantio = ""
+
         # Normaliza ano de plantio e corrige ruídos de OCR (ex: 2071 -> 2021, 96/04/2023 -> 26/04/2023)
         if plantio:
             plantio = re.sub(r"\b207(\d)\b", r"202\1", plantio)
@@ -185,14 +177,11 @@ def criar_excel(linhas):
         if not variedade and area and not plantio:
             variedade = "SEM PLANTAR"
 
-        # Se for talhão sem plantio (SEM PLANTAR / SEM CULTURA), deixa em branco se não houver data explícita no documento
+        # Se for talhão sem plantio (SEM PLANTAR / SEM CULTURA) ou sem data válida, mantém em branco
         if any(sp in variedade.upper() for sp in ["SEM PLANTAR", "SEM CULTURA"]):
-            if not plantio or not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|20[1-3]\d)\b", plantio):
-                plantio = ""
-        elif not plantio and data_padrao:
-            plantio = data_padrao
-        elif plantio and not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|(?:19|20)\d{2})\b", plantio):
-            plantio = data_padrao or ""
+            plantio = ""
+        elif not plantio or not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|(?:19|20)\d{2})\b", plantio):
+            plantio = ""
 
         # Descarta linhas fantasmas sem variedade e sem área
         if not variedade and not area:

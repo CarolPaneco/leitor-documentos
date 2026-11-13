@@ -10764,32 +10764,6 @@ def extrair_linhas_excel(documento):
                 "talhoes": doc_talhoes,
             }]
 
-    # Determina a data e o ano da safra / documento
-    from collections import Counter
-    datas_talhoes = []
-    anos_talhoes = []
-    for blk in blocos:
-        for t in (blk.get("talhoes") or []):
-            d_t = str(t.get("plantio") or t.get("data_plantio") or "").strip()
-            if re.match(r"^\d{1,2}/\d{1,2}/20[1-3]\d$", d_t):
-                datas_talhoes.append(d_t)
-            m_a = re.search(r"\b(20[1-3]\d)\b", d_t)
-            if m_a:
-                anos_talhoes.append(m_a.group(1))
-
-    data_doc_dominante = Counter(datas_talhoes).most_common(1)[0][0] if datas_talhoes else ""
-    if anos_talhoes:
-        ano_doc = Counter(anos_talhoes).most_common(1)[0][0]
-    else:
-        texto_geral = str(metadata.get("status") or "") + " " + str(documento.get("texto_completo") or "")
-        m_s = re.search(r"(?:P[oó]s\s*Plantio|Safra)[\s:–-]+(?:20)?(\d{2,4})", texto_geral, re.I)
-        if m_s:
-            ano_val = m_s.group(1)
-            ano_doc = "20" + ano_val if len(ano_val) == 2 else ano_val
-        else:
-            m_a = re.search(r"\b\d{2}/\d{2}/(20[1-3]\d)\b", texto_geral)
-            ano_doc = m_a.group(1) if m_a else "2026"
-
     linhas = []
 
     for bloco in blocos:
@@ -10885,6 +10859,12 @@ def extrair_linhas_excel(documento):
                     else:
                         area_t = f"{area_t},00"
 
+            # Limpa traços ou marcadores de vazio no plantio (ex: "-", "--", "—")
+            if plantio_t:
+                p_clean = plantio_t.strip(" |:;,-•·~_–—")
+                if not p_clean or p_clean.lower() in {"none", "null", "n/a", "na", "s/d", "sem data", "sem plantio"}:
+                    plantio_t = ""
+
             # Normaliza data e corrige ruídos de OCR em ano ou dia (ex: 2071 -> 2021, 96/04/2023 -> 26/04/2023)
             if plantio_t:
                 plantio_t = re.sub(r"\b207(\d)\b", r"202\1", plantio_t)
@@ -10953,14 +10933,11 @@ def extrair_linhas_excel(documento):
             if not var_final and area_t and not plantio_t:
                 var_final = "SEM PLANTAR"
 
-            # Se for talhão sem plantio (SEM PLANTAR / SEM CULTURA), deixa em branco se não houver data explícita no documento
+            # Se for talhão sem plantio (SEM PLANTAR / SEM CULTURA) ou sem data válida, mantém em branco
             if any(sp in var_final.upper() for sp in ["SEM PLANTAR", "SEM CULTURA"]):
-                if not plantio_t or not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|20[1-3]\d)\b", plantio_t):
-                    plantio_t = ""
-            elif not plantio_t and data_doc_dominante:
-                plantio_t = data_doc_dominante
-            elif plantio_t and not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|(?:19|20)\d{2})\b", plantio_t):
-                plantio_t = data_doc_dominante or ""
+                plantio_t = ""
+            elif not plantio_t or not re.search(r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|(?:19|20)\d{2})\b", plantio_t):
+                plantio_t = ""
 
             # Descarta linhas fantasmas sem variedade e sem área
             if not var_final and not area_t:
