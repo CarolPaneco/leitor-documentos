@@ -8311,19 +8311,20 @@ def _v18_extrair_tabelas_grade(caminho):
         cell_mask = np.zeros((h_img, w_img), dtype=np.uint8)
         for cbx, cby, cbw, cbh in cell_boxes:
             _cv2_v12.rectangle(cell_mask, (cbx, cby), (cbx + cbw, cby + cbh), 255, -1)
-        kernel = _cv2_v12.getStructuringElement(_cv2_v12.MORPH_RECT, (20, 20))
-        dilated_mask = _cv2_v12.dilate(cell_mask, kernel)
-        table_cnts, _ = _cv2_v12.findContours(dilated_mask, _cv2_v12.RETR_EXTERNAL, _cv2_v12.CHAIN_APPROX_SIMPLE)
-        for tc in table_cnts:
-            tbx, tby, tbw, tbh = _cv2_v12.boundingRect(tc)
-            if tbw > 250 and tbh > 80 and tbw < w_img * 0.70 and tbh < h_img * 0.70 and (tbw * tbh) < (w_img * h_img * 0.35):
-                tabelas_dilatadas.append((tbx, tby, tbw, tbh))
+        for ksize in ((8, 8), (20, 20)):
+            kernel = _cv2_v12.getStructuringElement(_cv2_v12.MORPH_RECT, ksize)
+            dilated_mask = _cv2_v12.dilate(cell_mask, kernel)
+            table_cnts, _ = _cv2_v12.findContours(dilated_mask, _cv2_v12.RETR_EXTERNAL, _cv2_v12.CHAIN_APPROX_SIMPLE)
+            for tc in table_cnts:
+                tbx, tby, tbw, tbh = _cv2_v12.boundingRect(tc)
+                if tbw > 250 and tbh > 80 and tbw < w_img * 0.70 and tbh < h_img * 0.70 and (tbw * tbh) < (w_img * h_img * 0.35):
+                    tabelas_dilatadas.append((tbx, tby, tbw, tbh))
 
-    # Adiciona tabelas dilatadas apenas se não sobrepuserem nenhuma tabela original
+    # Adiciona tabelas dilatadas apenas se não sobrepuserem nenhuma tabela já aceita
     for db in tabelas_dilatadas:
         dbx, dby, dbw, dbh = db
         sobrepos = False
-        for tb in tabelas_originais:
+        for tb in tabelas_candidatas:
             ix1 = max(dbx, tb[0])
             iy1 = max(dby, tb[1])
             ix2 = min(dbx + dbw, tb[0] + tb[2])
@@ -8338,6 +8339,7 @@ def _v18_extrair_tabelas_grade(caminho):
 
     tabelas_encontradas = sorted(tabelas_candidatas, key=lambda b: (b[1], b[0]))
     todos_registros = []
+    table_seq_idx = 0
 
     for bx, by, bw_box, bh_box in tabelas_encontradas:
         crop = img[by : by + bh_box, bx : bx + bw_box]
@@ -8374,31 +8376,73 @@ def _v18_extrair_tabelas_grade(caminho):
         if len(clustered_y) < 2 or len(clustered_x) < 3:
             continue
 
-        header_row = crop[clustered_y[0] : clustered_y[1], :]
-        h_txt = _pytesseract_v12.image_to_string(header_row, lang="por+eng", config="--psm 6").lower()
-        if not any(k in h_txt for k in ["talh", "taiha", "taln", "tath"]):
-            cell_header_txt = " ".join(
-                _pytesseract_v12.image_to_string(crop[clustered_y[0] : clustered_y[1], clustered_x[c]:clustered_x[c+1]], lang="por+eng", config="--psm 6").lower()
-                for c in range(min(4, len(clustered_x)-1))
+        def _eh_cabecalho_talhao(txt_h):
+            return (
+                any(k in txt_h for k in ["talh", "taiha", "taln", "tath"])
+                or ("varied" in txt_h and any(k in txt_h for k in ["plant", "area", "área", "ha"]))
             )
-            if any(k in cell_header_txt for k in ["talh", "taiha", "taln", "tath"]):
+
+        header_row_idx = None
+        h_txt = ""
+        for cand_r in range(min(2, len(clustered_y) - 1)):
+            header_row = crop[clustered_y[cand_r] : clustered_y[cand_r + 1], :]
+            cand_h_txt = _pytesseract_v12.image_to_string(header_row, lang="por+eng", config="--psm 6").lower()
+            if _eh_cabecalho_talhao(cand_h_txt):
+                header_row_idx = cand_r
+                h_txt = cand_h_txt
+                break
+            cell_header_txt = " ".join(
+                _pytesseract_v12.image_to_string(
+                    crop[clustered_y[cand_r] : clustered_y[cand_r + 1], clustered_x[c] : clustered_x[c + 1]],
+                    lang="por+eng",
+                    config="--psm 6",
+                ).lower()
+                for c in range(min(4, len(clustered_x) - 1))
+            )
+            if _eh_cabecalho_talhao(cell_header_txt):
+                header_row_idx = cand_r
                 h_txt = cell_header_txt
-            else:
-                continue
+                break
+
+        if header_row_idx is None:
+            continue
 
         # Verifica se é uma tabela de outra cultura (Laranja, Seringueira, Eucalipto, etc.) ou de resumo de áreas
-        y_above = max(0, by - 45)
-        above_crop = img[y_above:by, bx : bx + bw_box]
+        y_above = max(0, by - 55)
+        above_crop = img[y_above : min(h_img, by + 5), bx : bx + bw_box]
         above_txt = _pytesseract_v12.image_to_string(above_crop, lang="por+eng", config="--psm 6").lower() if above_crop.size > 0 else ""
-        
+
         texto_tabela_completo = h_txt + " " + above_txt
         if any(ign in texto_tabela_completo for ign in ["seringueira", "laranja", "eucal", "resumo de area", "resumo de área", "pasto", "bambu"]):
             continue
 
+        # Detecta código de Bloco específico desta tabela (ex.: BLOCO-301F0112 ou BLOCO-301F0111 acima do cabeçalho)
+        above_mid = img[max(0, by - 45) : max(1, by - 2), bx + int(bw_box * 0.24) : bx + int(bw_box * 0.76)]
+        bloco_cands_txt = []
+        if header_row_idx == 1:
+            row0_crop = crop[clustered_y[0] : clustered_y[1], :]
+            if row0_crop.size > 0:
+                bloco_cands_txt.append(_pytesseract_v12.image_to_string(row0_crop, lang="por+eng", config="--psm 6"))
+                bloco_cands_txt.append(_pytesseract_v12.image_to_string(row0_crop, lang="por+eng", config="--psm 7"))
+        for c_ab in (above_mid, above_crop):
+            if c_ab.size > 0:
+                bloco_cands_txt.append(_pytesseract_v12.image_to_string(c_ab, lang="por+eng", config="--psm 6"))
+                bloco_cands_txt.append(_pytesseract_v12.image_to_string(c_ab, lang="por+eng", config="--psm 7"))
+        tabela_bloco = ""
+        for t_bl in bloco_cands_txt:
+            m_bl = re.search(r"(?:BL[A-Z0-9\s]{0,6}[\s:–-]+)(\d{2,3}\s*[A-Za-z]\s*\d{4})", t_bl, re.I)
+            if not m_bl:
+                m_bl = re.search(r"\b(\d{3}\s*[A-Za-z]\s*\d{4})\b", t_bl, re.I)
+            if m_bl:
+                tabela_bloco = re.sub(r"\s+", "", m_bl.group(1)).upper()
+                if len(tabela_bloco) == 7 and tabela_bloco[:2].isdigit():
+                    tabela_bloco = "1" + tabela_bloco
+                break
+
         headers = []
         for col_idx in range(len(clustered_x) - 1):
             x1, x2 = clustered_x[col_idx], clustered_x[col_idx + 1]
-            cell = crop[clustered_y[0] : clustered_y[1], x1:x2]
+            cell = crop[clustered_y[header_row_idx] : clustered_y[header_row_idx + 1], x1:x2]
             inner = cell[3:-3, 3:-3] if cell.shape[0] > 6 and cell.shape[1] > 6 else cell
             cell_txt = _pytesseract_v12.image_to_string(inner, lang="por+eng", config="--psm 6").strip().lower()
             headers.append(cell_txt)
@@ -8446,7 +8490,7 @@ def _v18_extrair_tabelas_grade(caminho):
             registros_sub = []
             carry_talhao = ""
 
-            for r in range(1, len(clustered_y) - 1):
+            for r in range(header_row_idx + 1, len(clustered_y) - 1):
                 y1, y2 = clustered_y[r], clustered_y[r + 1]
                 if y2 - y1 < 10:
                     continue
@@ -8658,7 +8702,10 @@ def _v18_extrair_tabelas_grade(caminho):
                     "area": area_norm,
                     "plantio": data_norm,
                     "origem": "v18_grade_tabela",
+                    "_table_idx": table_seq_idx,
                 }
+                if tabela_bloco:
+                    rec_item["bloco"] = tabela_bloco
                 if prop_txt:
                     rec_item["propriedade"] = limpar_nome_propriedade(prop_txt)
                 if proprio_txt:
@@ -8667,6 +8714,7 @@ def _v18_extrair_tabelas_grade(caminho):
 
             n_sub = len(registros_sub)
             if n_sub > 0:
+                table_seq_idx += 1
                 for i, r in enumerate(registros_sub):
                     t_raw = str(r.get("talhao", "")).strip()
                     m = re.findall(r"\b\d{1,4}\b", t_raw)
@@ -9479,10 +9527,16 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
             continue
 
         var_novo_key = _key(var_novo_raw)
+        bloco_novo = str(novo.get("bloco", "")).strip()
 
         candidatos_mesmo_talhao = [
             r for r in base
             if str(r.get("talhao", "")).strip() == talhao_novo
+            and (
+                not bloco_novo
+                or not str(r.get("bloco", "")).strip()
+                or str(r.get("bloco", "")).strip() == bloco_novo
+            )
         ]
 
         alvo = None
@@ -9561,6 +9615,9 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
             )
             continue
 
+        if bloco_novo and not str(alvo.get("bloco", "")).strip():
+            alvo["bloco"] = bloco_novo
+
         for campo in (
             "variedade",
             "area",
@@ -9579,7 +9636,7 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
     # Deduplicação segura de SEM PLANTAR: só descarta se a área for idêntica à de uma variedade cultivada
     por_talhao = {}
     for r in base:
-        t_id = str(r.get("talhao", "")).strip()
+        t_id = (str(r.get("bloco", "")).strip(), str(r.get("talhao", "")).strip())
         por_talhao.setdefault(t_id, []).append(r)
 
     base_limpa = []
@@ -9622,7 +9679,26 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
             base_limpa.extend(lista)
     base = base_limpa
 
-    # Ordenação estável por página/talhão.
+    blocos_vistos = []
+    blocos_min_talhao = {}
+    for r in base:
+        b_c = str(r.get("bloco", "")).strip()
+        if b_c not in blocos_vistos:
+            blocos_vistos.append(b_c)
+        try:
+            t_v = int(str(r.get("talhao", "")))
+        except Exception:
+            t_v = 9999
+        if b_c not in blocos_min_talhao or t_v < blocos_min_talhao[b_c]:
+            blocos_min_talhao[b_c] = t_v
+
+    blocos_ordenados = sorted(
+        blocos_vistos,
+        key=lambda b_c: (blocos_min_talhao.get(b_c, 9999), blocos_vistos.index(b_c)),
+    )
+    blocos_ordem = {b_c: idx for idx, b_c in enumerate(blocos_ordenados)}
+
+    # Ordenação estável por página/bloco/talhão.
     def chave_ord(r):
         try:
             n = int(str(r.get("talhao", "")))
@@ -9631,6 +9707,7 @@ def _v17_mesclar_tabelas(base_talhoes, resgate):
 
         return (
             r.get("pagina", 0),
+            blocos_ordem.get(str(r.get("bloco", "")).strip(), 0),
             n,
         )
 
@@ -10486,18 +10563,33 @@ def extrair_dados(processed):
                 r["pagina"] = page_index
             grade_resgate.extend(regs)
 
-    # Recupera células tanto das linhas novas quanto das linhas que a
-    # versão anterior já encontrou, mas deixou com campo vazio.
-    candidatos_celulas = [
-        *existentes,
-        *grade_resgate,
-        *resgate,
-    ]
+    # Se o extrator em grade detectou múltiplas tabelas/blocos distintos na página,
+    # os parsers horizontais de página inteira (existentes / resgate) colidem entre tabelas
+    # lado a lado, portanto usamos exclusivamente os registros isolados por grade.
+    blocos_grade_distintos = []
+    tabelas_grade_distintas = set()
+    for r in grade_resgate:
+        b_g = str(r.get("bloco") or "").strip()
+        if b_g and b_g not in blocos_grade_distintos:
+            blocos_grade_distintos.append(b_g)
+        if r.get("_table_idx") is not None:
+            tabelas_grade_distintas.add((r.get("pagina", 0), r.get("_table_idx")))
 
-    candidatos_celulas = _v17_recuperar_celulas_tabela(
-        processed,
-        candidatos_celulas,
-    )
+    if len(blocos_grade_distintos) >= 2 or len(tabelas_grade_distintas) >= 2:
+        existentes = []
+        candidatos_celulas = list(grade_resgate)
+    else:
+        # Recupera células tanto das linhas novas quanto das linhas que a
+        # versão anterior já encontrou, mas deixou com campo vazio.
+        candidatos_celulas = [
+            *existentes,
+            *grade_resgate,
+            *resgate,
+        ]
+        candidatos_celulas = _v17_recuperar_celulas_tabela(
+            processed,
+            candidatos_celulas,
+        )
 
     if candidatos_celulas:
         # IMPORTANTE: a terceira leitura pode ter recuperado uma célula
@@ -10514,12 +10606,38 @@ def extrair_dados(processed):
             or resultado["metadata"].get("bloco", "")
         )
 
+        blocos_em_talhoes = []
+        for r in resultado["talhoes"]:
+            b_r = str(r.get("bloco") or "").strip()
+            if b_r and b_r not in blocos_em_talhoes:
+                blocos_em_talhoes.append(b_r)
+
+        if blocos_em_talhoes and not str(resultado["metadata"].get("bloco") or "").strip():
+            resultado["metadata"]["bloco"] = blocos_em_talhoes[0]
+            resultado["bloco"] = blocos_em_talhoes[0]
+            bloco = blocos_em_talhoes[0]
+
         blocos_existentes = resultado.get("blocos") or []
-        if len(blocos_existentes) > 1:
+        if len(blocos_em_talhoes) > 1:
+            resultado["blocos"] = [
+                {
+                    "bloco": b_cod,
+                    "talhoes": [
+                        r for r in resultado["talhoes"]
+                        if (str(r.get("bloco") or "").strip() or bloco) == b_cod
+                    ],
+                }
+                for b_cod in blocos_em_talhoes
+            ]
+        elif len(blocos_existentes) > 1:
             # Preserva múltiplos blocos originais para não aglutinar blocos distintos
             pass
         else:
-            bloco_final = bloco or (blocos_existentes[0].get("bloco") if blocos_existentes else "")
+            bloco_final = (
+                (blocos_em_talhoes[0] if blocos_em_talhoes else "")
+                or bloco
+                or (blocos_existentes[0].get("bloco") if blocos_existentes else "")
+            )
             resultado["blocos"] = [{
                 "bloco": bloco_final,
                 "talhoes": resultado["talhoes"],
@@ -10882,7 +11000,14 @@ def extrair_linhas_excel(documento):
                     else:
                         plantio_t = f"{d_val:02d}/{m_val:02d}/{y_val}"
 
-            chave = (codigo_bloco, t_num, var_t, area_t, plantio_t)
+            bloco_efetivo = str(
+                talhao.get("bloco")
+                or codigo_bloco
+                or fn_meta.get("bloco")
+                or ""
+            ).strip()
+
+            chave = (bloco_efetivo, t_num, var_t, area_t, plantio_t)
             if chave in vistos:
                 continue
             vistos.add(chave)
