@@ -110,6 +110,8 @@ def criar_excel(linhas):
         # Descarta linhas de totais ou operadores técnicos vazadas
         var_low = variedade.lower()
         t_low = talhao.lower()
+        if talhao.isdigit() and 1900 <= int(talhao) <= 2099:
+            continue
         if any(k in var_low or k in t_low for k in [
             "total", "subtotal", "sub-total", "resumo", "vant", "everton", "ezequias",
             "topografo", "piloto", "responsavel", "unidade gestora", "desenho", "escala",

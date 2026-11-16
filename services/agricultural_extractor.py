@@ -10563,44 +10563,42 @@ def extrair_dados(processed):
                 r["pagina"] = page_index
             grade_resgate.extend(regs)
 
-    # Se o extrator em grade detectou múltiplas tabelas/blocos distintos na página,
-    # os parsers horizontais de página inteira (existentes / resgate) colidem entre tabelas
-    # lado a lado, portanto usamos exclusivamente os registros isolados por grade.
-    blocos_grade_distintos = []
-    tabelas_grade_distintas = set()
-    for r in grade_resgate:
-        b_g = str(r.get("bloco") or "").strip()
-        if b_g and b_g not in blocos_grade_distintos:
-            blocos_grade_distintos.append(b_g)
-        if r.get("_table_idx") is not None:
-            tabelas_grade_distintas.add((r.get("pagina", 0), r.get("_table_idx")))
-
-    if len(blocos_grade_distintos) >= 2 or len(tabelas_grade_distintas) >= 2:
-        existentes = []
-        candidatos_celulas = list(grade_resgate)
+    if grade_resgate:
+        # Quando a tabela em grade física foi localizada e extraída com sucesso pelo OpenCV,
+        # ela é a autoridade máxima dos talhões da página.
+        # Não mesclamos com candidatos de texto livre (resgate) ou OCR espacial aproximado (existentes)
+        # que possam conter ruídos do mapa ou anos lidos como talhão.
+        candidatos_celulas = _v17_recuperar_celulas_tabela(
+            processed,
+            list(grade_resgate),
+        )
+        resultado["talhoes"] = _v17_mesclar_tabelas(
+            [],
+            candidatos_celulas,
+        )
     else:
-        # Recupera células tanto das linhas novas quanto das linhas que a
-        # versão anterior já encontrou, mas deixou com campo vazio.
+        # Fallback para documentos sem grade visível
         candidatos_celulas = [
             *existentes,
-            *grade_resgate,
             *resgate,
         ]
         candidatos_celulas = _v17_recuperar_celulas_tabela(
             processed,
             candidatos_celulas,
         )
+        if candidatos_celulas:
+            resultado["talhoes"] = _v17_mesclar_tabelas(
+                existentes,
+                candidatos_celulas,
+            )
 
-    if candidatos_celulas:
-        # IMPORTANTE: a terceira leitura pode ter recuperado uma célula
-        # que estava vazia. O código anterior calculava isso, mas depois
-        # descartava o resultado e mesclava apenas ``resgate``.
-        # Agora a versão corrigida realmente entra na saída final.
-        resultado["talhoes"] = _v17_mesclar_tabelas(
-            existentes,
-            candidatos_celulas,
-        )
+    # Invalida talhões com número de ano (ex: 2024, 2025, 2026) que tenham vazado
+    resultado["talhoes"] = [
+        r for r in (resultado.get("talhoes") or [])
+        if not (str(r.get("talhao", "")).isdigit() and 1900 <= int(str(r.get("talhao", ""))) <= 2099)
+    ]
 
+    if resultado["talhoes"]:
         bloco = (
             resultado.get("bloco")
             or resultado["metadata"].get("bloco", "")
@@ -10927,6 +10925,8 @@ def extrair_linhas_excel(documento):
                 or ""
             ).strip()
             if not t_num or not any(c.isdigit() for c in t_num):
+                continue
+            if t_num.isdigit() and 1900 <= int(t_num) <= 2099:
                 continue
 
             var_t = str(talhao.get("variedade") or "").strip()
