@@ -8416,28 +8416,56 @@ def _v18_extrair_tabelas_grade(caminho):
         if any(ign in texto_tabela_completo for ign in ["seringueira", "laranja", "eucal", "resumo de area", "resumo de área", "pasto", "bambu"]):
             continue
 
-        # Detecta código de Bloco específico desta tabela (ex.: BLOCO-301F0112 ou BLOCO-301F0111 acima do cabeçalho)
-        above_mid = img[max(0, by - 45) : max(1, by - 2), bx + int(bw_box * 0.24) : bx + int(bw_box * 0.76)]
-        bloco_cands_txt = []
+        # Detecta código de Bloco e Propriedade específicos desta tabela
+        bloco_cands_img = []
         if header_row_idx == 1:
+            h_r0 = clustered_y[1] - clustered_y[0]
             row0_crop = crop[clustered_y[0] : clustered_y[1], :]
-            if row0_crop.size > 0:
-                bloco_cands_txt.append(_pytesseract_v12.image_to_string(row0_crop, lang="por+eng", config="--psm 6"))
-                bloco_cands_txt.append(_pytesseract_v12.image_to_string(row0_crop, lang="por+eng", config="--psm 7"))
-        for c_ab in (above_mid, above_crop):
-            if c_ab.size > 0:
-                bloco_cands_txt.append(_pytesseract_v12.image_to_string(c_ab, lang="por+eng", config="--psm 6"))
-                bloco_cands_txt.append(_pytesseract_v12.image_to_string(c_ab, lang="por+eng", config="--psm 7"))
+            row0_mid = crop[clustered_y[0] : clustered_y[1], int(bw_box * 0.15) : int(bw_box * 0.85)]
+            row0_top = crop[clustered_y[0] + 2 : clustered_y[0] + max(20, int(h_r0 * 0.75)), int(bw_box * 0.15) : int(bw_box * 0.85)]
+            bloco_cands_img.extend([row0_top, row0_mid, row0_crop])
+        for dy in (45, 80, 120):
+            y_ab = max(0, by - dy)
+            ab_crop = img[y_ab : min(h_img, by + 5), bx : bx + bw_box]
+            ab_mid = img[y_ab : min(h_img, by + 5), bx + int(bw_box * 0.15) : bx + int(bw_box * 0.85)]
+            bloco_cands_img.extend([ab_crop, ab_mid])
+
+        bloco_cands_txt = []
+        for c_img in bloco_cands_img:
+            if c_img.size > 0:
+                for psm in (6, 7):
+                    bloco_cands_txt.append(_pytesseract_v12.image_to_string(c_img, lang="por+eng", config=f"--psm {psm}"))
+                c_gray = _cv2_v12.cvtColor(c_img, _cv2_v12.COLOR_BGR2GRAY)
+                for psm in (6, 7):
+                    bloco_cands_txt.append(_pytesseract_v12.image_to_string(c_gray, lang="por+eng", config=f"--psm {psm}"))
+
         tabela_bloco = ""
+        tabela_propriedade = ""
+
         for t_bl in bloco_cands_txt:
-            m_bl = re.search(r"(?:BL[A-Z0-9\s]{0,6}[\s:–-]+)(\d{2,3}\s*[A-Za-z]\s*\d{4})", t_bl, re.I)
-            if not m_bl:
-                m_bl = re.search(r"\b(\d{3}\s*[A-Za-z]\s*\d{4})\b", t_bl, re.I)
-            if m_bl:
-                tabela_bloco = re.sub(r"\s+", "", m_bl.group(1)).upper()
-                if len(tabela_bloco) == 7 and tabela_bloco[:2].isdigit():
-                    tabela_bloco = "1" + tabela_bloco
-                break
+            if not tabela_bloco:
+                m_bl = re.search(r"(?:BL[A-Z0-9\s]{0,6}[\s:–©*/<>=~-]+)(\d{2,3}\s*[A-Za-z0-9]\s*\d{4})", t_bl, re.I)
+                if not m_bl:
+                    m_bl = re.search(r"\b(\d{3}\s*[A-Za-z0-9]\s*\d{4})\b", t_bl, re.I)
+                if m_bl:
+                    cand = re.sub(r"[\s©*/<>=~-]", "", m_bl.group(1)).upper()
+                    if len(cand) == 7 and cand[:2].isdigit():
+                        cand = "1" + cand
+                    if len(cand) == 8 and cand[0] == "3" and cand[1] == "6" and cand[2] in ("1", "9"):
+                        cand = "30" + cand[2:]
+                    if len(cand) == 8 and cand[3] in ("E", "6", "0") and cand[:3].isdigit() and cand[4:].isdigit():
+                        cand = cand[:3] + "F" + cand[4:]
+                    if re.match(r"^\d{3}[A-Z]\d{4}$", cand):
+                        tabela_bloco = cand
+
+            if not tabela_propriedade:
+                m_p = re.search(r"\b((?:Fazenda|S[ií]tio|Est[aâ]ncia|Ch[aá]cara|Gleba|Rancho)\s+[A-Za-zÀ-ÿ\s]{3,35})\b", t_bl, re.I)
+                if m_p:
+                    p_cand = m_p.group(1).strip()
+                    p_cand = re.split(r"(?i)\b(?:bloco|talh[aã]o|área|area|plantio)\b", p_cand)[0].strip(" |:;,-")
+                    clean_p = limpar_nome_propriedade(p_cand)
+                    if clean_p and len(clean_p.split()) >= 2:
+                        tabela_propriedade = clean_p
 
         headers = []
         for col_idx in range(len(clustered_x) - 1):
@@ -8706,6 +8734,8 @@ def _v18_extrair_tabelas_grade(caminho):
                 }
                 if tabela_bloco:
                     rec_item["bloco"] = tabela_bloco
+                if tabela_propriedade and not prop_txt:
+                    prop_txt = tabela_propriedade
                 if prop_txt:
                     rec_item["propriedade"] = limpar_nome_propriedade(prop_txt)
                 if proprio_txt:
@@ -10620,6 +10650,8 @@ def extrair_dados(processed):
             resultado["blocos"] = [
                 {
                     "bloco": b_cod,
+                    "propriedade": next((r.get("propriedade") for r in resultado["talhoes"] if str(r.get("bloco") or "").strip() == b_cod and r.get("propriedade")), ""),
+                    "proprietario": next((r.get("proprietario") for r in resultado["talhoes"] if str(r.get("bloco") or "").strip() == b_cod and r.get("proprietario")), ""),
                     "talhoes": [
                         r for r in resultado["talhoes"]
                         if (str(r.get("bloco") or "").strip() or bloco) == b_cod
