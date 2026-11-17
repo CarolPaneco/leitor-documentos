@@ -8294,7 +8294,7 @@ def _v18_extrair_tabelas_grade(caminho):
     tabelas_originais = []
     for c in cnts:
         bx, by, bw_box, bh_box = _cv2_v12.boundingRect(c)
-        if bw_box > 250 and bh_box > 80 and bw_box < w_img * 0.70 and bh_box < h_img * 0.70 and (bw_box * bh_box) < (w_img * h_img * 0.35):
+        if bw_box > 250 and bh_box > 80 and bw_box < w_img * 0.75 and bh_box < h_img * 0.92 and (bw_box * bh_box) < (w_img * h_img * 0.50):
             tabelas_originais.append((bx, by, bw_box, bh_box))
 
     # Prioridade para as tabelas com contorno original detectado pelo OpenCV
@@ -8317,7 +8317,7 @@ def _v18_extrair_tabelas_grade(caminho):
             table_cnts, _ = _cv2_v12.findContours(dilated_mask, _cv2_v12.RETR_EXTERNAL, _cv2_v12.CHAIN_APPROX_SIMPLE)
             for tc in table_cnts:
                 tbx, tby, tbw, tbh = _cv2_v12.boundingRect(tc)
-                if tbw > 250 and tbh > 80 and tbw < w_img * 0.70 and tbh < h_img * 0.70 and (tbw * tbh) < (w_img * h_img * 0.35):
+                if tbw > 250 and tbh > 80 and tbw < w_img * 0.75 and tbh < h_img * 0.92 and (tbw * tbh) < (w_img * h_img * 0.50):
                     tabelas_dilatadas.append((tbx, tby, tbw, tbh))
 
     # Adiciona tabelas dilatadas apenas se não sobrepuserem nenhuma tabela já aceita
